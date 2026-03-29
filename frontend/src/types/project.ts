@@ -1,0 +1,26 @@
+import { Deployment } from './deployment';
+
+export type ProjectType = 'NODE_BACKEND' | 'REACT_FRONTEND' | 'STATIC_SITE' | 'FULLSTACK' | 'CUSTOM_DOCKERFILE';
+export type ProjectStatus = 'ACTIVE' | 'INACTIVE' | 'FAILED' | 'BUILDING';
+
+export interface Project {
+  id: string;
+  name: string;
+  repoUrl: string;
+  subdomain: string;
+  projectType: ProjectType;
+  status: ProjectStatus;
+  branch: string;
+  envVars?: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+  deployments?: Deployment[];
+}
+
+export interface CreateProjectPayload {
+  name: string;
+  repoUrl: string;
+  branch: string;
+  projectType: ProjectType;
+  envVars?: Record<string, string>;
+}

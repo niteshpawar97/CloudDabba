@@ -1,0 +1,55 @@
+import { Response, NextFunction } from 'express';
+import { DeploymentService } from '../../core/services/deployment.service';
+import { LogService } from '../../core/services/log.service';
+import { AuthRequest } from '../../core/types';
+import { sendSuccess, sendCreated } from '../../shared/utils/api-response';
+
+export class DeploymentController {
+  static async triggerDeploy(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.triggerDeploy(req.params.id as string, req.user!.id);
+      sendCreated(res, deployment, 'Deployment triggered');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async listByProject(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployments = await DeploymentService.listByProject(req.params.id as string, req.user!.id);
+      sendSuccess(res, deployments);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getDeployment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
+      sendSuccess(res, deployment);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async stopDeployment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DeploymentService.stopDeployment(req.params.id as string, req.user!.id);
+      sendSuccess(res, null, 'Deployment stopped');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getLogs(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const result = await LogService.getLogs(req.params.id as string, page, limit);
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+}

@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique @db.VarChar(255)
+  password           String    @db.VarChar(255)
+  name               String    @db.VarChar(100)
+  githubPatEncrypted String?   @map("github_pat_encrypted") @db.Text
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  projects           Project[]
+
+  @@map("users")
+}
+
+enum ProjectType {
+  NODE_BACKEND
+  REACT_FRONTEND
+  STATIC_SITE
+  FULLSTACK
+  CUSTOM_DOCKERFILE
+
+  @@map("project_type")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  INACTIVE
+  FAILED
+  BUILDING
+
+  @@map("project_status")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  userId      String        @map("user_id")
+  name        String        @db.VarChar(100)
+  repoUrl     String        @map("repo_url") @db.VarChar(500)
+  subdomain   String        @unique @db.VarChar(63)
+  projectType ProjectType   @map("project_type")
+  status      ProjectStatus @default(INACTIVE)
+  branch      String        @default("main") @db.VarChar(100)
+  envVars     Json?         @map("env_vars")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployments Deployment[]
+
+  @@unique([userId, name])
+  @@map("projects")
+}
+
+enum DeploymentStatus {
+  QUEUED
+  CLONING
+  BUILDING
+  DEPLOYING
+  LIVE
+  FAILED
+  STOPPED
+
+  @@map("deployment_status")
+}
+
+model Deployment {
+  id            String           @id @default(uuid())
+  projectId     String           @map("project_id")
+  status        DeploymentStatus @default(QUEUED)
+  commitHash    String?          @map("commit_hash") @db.VarChar(40)
+  dockerImageId String?          @map("docker_image_id") @db.VarChar(100)
+  containerId   String?          @map("container_id") @db.VarChar(100)
+  containerPort Int?             @map("container_port")
+  startedAt     DateTime         @default(now()) @map("started_at")
+  finishedAt    DateTime?        @map("finished_at")
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  logs          Log[]
+
+  @@map("deployments")
+}
+
+enum LogType {
+  BUILD
+  RUNTIME
+  SYSTEM
+
+  @@map("log_type")
+}
+
+model Log {
+  id           String     @id @default(uuid())
+  deploymentId String     @map("deployment_id")
+  type         LogType
+  message      String     @db.Text
+  timestamp    DateTime   @default(now())
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([deploymentId, timestamp])
+  @@map("logs")
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.production
+.env.local
+*.log
+.DS_Store
+nginx/sites/*.conf
+backend/logs/
+frontend/dist/
