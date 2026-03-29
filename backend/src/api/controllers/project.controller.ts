@@ -45,14 +45,15 @@ export class ProjectController {
 
   static async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const project = await ProjectService.delete(req.params.id as string, req.user!.id);
-
-      const deployments = await DeploymentService.listByProject(project.id, req.user!.id).catch(() => []);
+      // Cleanup containers BEFORE deleting from DB (cascade deletes deployments)
+      const deployments = await DeploymentService.listByProject(req.params.id as string, req.user!.id).catch(() => []);
       for (const dep of deployments as any[]) {
-        if (dep.containerId && dep.status === 'LIVE') {
+        if (dep.containerId) {
           await DockerService.stopContainer(dep.containerId).catch(() => {});
         }
       }
+
+      const project = await ProjectService.delete(req.params.id as string, req.user!.id);
       await NginxService.removeConfig(project.subdomain).catch(() => {});
 
       sendSuccess(res, null, 'Project deleted');
