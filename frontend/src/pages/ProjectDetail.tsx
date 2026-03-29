@@ -51,12 +51,19 @@ export function ProjectDetail() {
         <div>
           <h1 className="text-2xl font-bold text-white">{project.name}</h1>
           <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
-            <span className="flex items-center gap-1">
-              <Globe className="h-4 w-4" />
-              <a href={`http://${project.subdomain}.cloud.niketgroup.com`} target="_blank" className="text-blue-400 hover:underline flex items-center gap-1">
-                {project.subdomain}.cloud.niketgroup.com <ExternalLink className="h-3 w-3" />
-              </a>
-            </span>
+            {project.deployments?.[0]?.containerPort && project.deployments[0].status === 'LIVE' ? (
+              <span className="flex items-center gap-1">
+                <Globe className="h-4 w-4 text-green-400" />
+                <a href={`http://129.159.16.65:${project.deployments[0].containerPort}`} target="_blank" className="text-green-400 hover:underline flex items-center gap-1">
+                  129.159.16.65:{project.deployments[0].containerPort} <ExternalLink className="h-3 w-3" />
+                </a>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Globe className="h-4 w-4" />
+                <span className="text-slate-500">{project.subdomain}.cloud.niketgroup.com</span>
+              </span>
+            )}
             <span className="flex items-center gap-1"><GitBranch className="h-4 w-4" /> {project.branch}</span>
           </div>
         </div>
