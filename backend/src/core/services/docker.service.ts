@@ -141,7 +141,10 @@ export class DockerService {
         break;
     }
 
-    const templatePath = path.join(__dirname, '../../infrastructure/docker/templates', templateName);
+    // Use src path (works in both dev and prod)
+    const srcTemplates = path.join(__dirname, '../../infrastructure/docker/templates', templateName);
+    const rootTemplates = path.resolve(process.cwd(), 'src/infrastructure/docker/templates', templateName);
+    const templatePath = await fs.access(srcTemplates).then(() => srcTemplates).catch(() => rootTemplates);
     const destPath = path.join(repoPath, 'Dockerfile');
     await fs.copyFile(templatePath, destPath);
     logger.info(`Copied ${templateName} to ${repoPath}`);
