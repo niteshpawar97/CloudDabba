@@ -28,28 +28,36 @@ const TEMPLATE = `server {
 
 export class NginxService {
   static async generateConfig(subdomain: string, port: number) {
-    const configContent = ejs.render(TEMPLATE, {
-      subdomain,
-      port,
-      baseDomain: config.domain.base,
-    });
+    try {
+      const configContent = ejs.render(TEMPLATE, {
+        subdomain,
+        port,
+        baseDomain: config.domain.base,
+      });
 
-    const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
-    await fs.mkdir(config.nginx.sitesPath, { recursive: true });
-    await fs.writeFile(configPath, configContent, 'utf-8');
-    logger.info(`NGINX config generated: ${configPath}`);
+      const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
+      await fs.mkdir(config.nginx.sitesPath, { recursive: true });
+      await fs.writeFile(configPath, configContent, 'utf-8');
+      logger.info(`NGINX config generated: ${configPath}`);
 
-    await this.reload();
+      await this.reload();
+    } catch (error: any) {
+      // Don't fail deployment if NGINX config fails
+      logger.warn(`NGINX config failed (non-fatal): ${error.message}`);
+      logger.info(`App is still accessible at http://127.0.0.1:${port}`);
+    }
   }
 
   static async removeConfig(subdomain: string) {
-    const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
     try {
+      const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
       await fs.unlink(configPath);
       logger.info(`NGINX config removed: ${configPath}`);
       await this.reload();
     } catch (error: any) {
-      if (error.code !== 'ENOENT') throw error;
+      if (error.code !== 'ENOENT') {
+        logger.warn(`NGINX config removal failed (non-fatal): ${error.message}`);
+      }
     }
   }
 
@@ -59,8 +67,7 @@ export class NginxService {
       await execFileAsync(cmd, args);
       logger.info('NGINX reloaded successfully');
     } catch (error: any) {
-      logger.error('Failed to reload NGINX:', error);
-      throw error;
+      logger.warn(`NGINX reload skipped: ${error.message}`);
     }
   }
 }
