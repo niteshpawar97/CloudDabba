@@ -33,9 +33,6 @@ jobs:
             npm run build
 
             # Restart backend
-            pm2 restart clouddabba-api
-
-            # Reload NGINX
-            sudo nginx -t && sudo nginx -s reload
+            pm2 restart clouddabba-api || pm2 start ecosystem.config.js
 
             echo "Deploy complete!"
