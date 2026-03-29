@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import path from 'path';
 import { config } from './shared/config/app.config';
 import { errorHandler } from './core/middleware/error-handler.middleware';
 import { generalLimiter } from './core/middleware/rate-limit.middleware';
@@ -34,6 +35,16 @@ app.use(generalLimiter);
 
 // API Routes
 app.use(`/api/${config.app.apiVersion}`, routes);
+
+// Serve frontend static files (production)
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
+app.get('*', (_req, res, next) => {
+  if (_req.path.startsWith('/api') || _req.path.startsWith('/ws')) {
+    return next();
+  }
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 // Error handler (must be last)
 app.use(errorHandler);
