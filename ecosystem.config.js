@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'clouddabba-api',
-      cwd: '/opt/clouddabba/backend',
+      cwd: '/home/learn-nodejs/htdocs/clouddabba/backend',
       script: 'dist/server.js',
       instances: 1,
       autorestart: true,

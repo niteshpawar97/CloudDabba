@@ -1,0 +1,41 @@
+name: Deploy CloudDabba to VPS
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: learn-nodejs
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /home/learn-nodejs/htdocs/clouddabba
+
+            # Pull latest code
+            git pull origin master
+
+            # Backend
+            cd /home/learn-nodejs/htdocs/clouddabba/backend
+            npm install
+            npx prisma generate
+            npx prisma db push
+            npm run build
+
+            # Frontend
+            cd /home/learn-nodejs/htdocs/clouddabba/frontend
+            npm install
+            npm run build
+
+            # Restart backend
+            pm2 restart clouddabba-api
+
+            # Reload NGINX
+            sudo nginx -t && sudo nginx -s reload
+
+            echo "Deploy complete!"
