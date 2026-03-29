@@ -7,6 +7,7 @@ import path from 'path';
 import { config } from './shared/config/app.config';
 import { errorHandler } from './core/middleware/error-handler.middleware';
 import { generalLimiter } from './core/middleware/rate-limit.middleware';
+import { subdomainProxy } from './core/middleware/subdomain-proxy.middleware';
 import routes from './api/routes';
 
 const app = express();
@@ -29,6 +30,9 @@ app.use(compression());
 if (config.app.nodeEnv !== 'test') {
   app.use(morgan('dev'));
 }
+
+// Subdomain proxy — route *.cloud.niketgroup.com to containers
+app.use(subdomainProxy);
 
 // Rate limiting
 app.use(generalLimiter);
