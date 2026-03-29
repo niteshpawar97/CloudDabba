@@ -33,7 +33,7 @@ echo "[1/4] Setting up Backend..."
 cd $INSTALL_DIR/backend
 
 if [ ! -f .env ]; then
-    cp .env.example .env
+    cp $INSTALL_DIR/.env.production .env
     echo ""
     echo "  ============================================"
     echo "  IMPORTANT: Edit .env with your DB credentials!"

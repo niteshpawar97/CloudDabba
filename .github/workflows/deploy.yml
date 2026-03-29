@@ -20,6 +20,9 @@ jobs:
             # Pull latest code
             git pull origin master
 
+            # Copy production env if not exists
+            cp -n .env.production backend/.env 2>/dev/null || true
+
             # Backend
             cd /home/learn-nodejs/htdocs/clouddabba/backend
             npm install
@@ -33,6 +36,6 @@ jobs:
             npm run build
 
             # Restart backend
-            pm2 restart clouddabba-api || pm2 start ecosystem.config.js
+            pm2 restart clouddabba-api || pm2 start /home/learn-nodejs/htdocs/clouddabba/ecosystem.config.js
 
             echo "Deploy complete!"

@@ -1,8 +1,8 @@
 node_modules/
 dist/
 .env
-.env.production
 .env.local
+backend/.env
 *.log
 .DS_Store
 nginx/sites/*.conf
