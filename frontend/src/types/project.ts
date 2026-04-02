@@ -22,5 +22,6 @@ export interface CreateProjectPayload {
   repoUrl: string;
   branch: string;
   projectType: ProjectType;
+  subdomain?: string;
   envVars?: Record<string, string>;
 }

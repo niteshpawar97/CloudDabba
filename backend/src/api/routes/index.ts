@@ -16,4 +16,16 @@ router.get('/health', (_req, res) => {
   res.json({ success: true, message: 'CloudDabba API is running', timestamp: new Date().toISOString() });
 });
 
+// Public config (domain info for frontend)
+router.get('/config', (_req, res) => {
+  const { config } = require('../../shared/config/app.config');
+  res.json({
+    success: true,
+    data: {
+      baseDomain: config.domain.base,
+      protocol: process.env.NODE_ENV === 'production' ? 'https' : 'http',
+    },
+  });
+});
+
 export default router;

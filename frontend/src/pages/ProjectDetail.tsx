@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
+import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X } from 'lucide-react';
 
 export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -15,6 +17,18 @@ export function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [deploying, setDeploying] = useState(false);
+  const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
+
+  // Subdomain editing
+  const [editingSubdomain, setEditingSubdomain] = useState(false);
+  const [newSubdomain, setNewSubdomain] = useState('');
+  const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
+  const [subdomainSaving, setSubdomainSaving] = useState(false);
+  const [subdomainError, setSubdomainError] = useState('');
+
+  useEffect(() => {
+    getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (projectId) {
@@ -24,6 +38,20 @@ export function ProjectDetail() {
         .finally(() => setLoading(false));
     }
   }, [projectId]);
+
+  // Check subdomain availability with debounce
+  useEffect(() => {
+    if (!newSubdomain || newSubdomain.length < 3) {
+      setSubdomainAvailable(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      checkSubdomain(newSubdomain)
+        .then((res) => setSubdomainAvailable(res.available))
+        .catch(() => setSubdomainAvailable(null));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [newSubdomain]);
 
   const handleDeploy = async () => {
     if (!project) return;
@@ -42,8 +70,26 @@ export function ProjectDetail() {
     navigate('/');
   };
 
+  const handleSubdomainSave = async () => {
+    if (!project || !newSubdomain || !subdomainAvailable) return;
+    setSubdomainSaving(true);
+    setSubdomainError('');
+    try {
+      await updateSubdomain(project.id, newSubdomain);
+      const updated = await getProject(project.id);
+      setProject(updated);
+      setEditingSubdomain(false);
+    } catch (err: any) {
+      setSubdomainError(err.response?.data?.message || 'Failed to update subdomain');
+    } finally {
+      setSubdomainSaving(false);
+    }
+  };
+
   if (loading) return <Spinner size="lg" />;
   if (!project) return null;
+
+  const subdomainUrl = `https://${project.subdomain}.${baseDomain}`;
 
   return (
     <div>
@@ -51,17 +97,33 @@ export function ProjectDetail() {
         <div>
           <h1 className="text-2xl font-bold text-white">{project.name}</h1>
           <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
-            {project.deployments?.[0]?.containerPort && project.deployments[0].status === 'LIVE' ? (
-              <span className="flex items-center gap-1">
-                <Globe className="h-4 w-4 text-green-400" />
-                <a href={`http://129.159.16.65:${project.deployments[0].containerPort}`} target="_blank" className="text-green-400 hover:underline flex items-center gap-1">
-                  129.159.16.65:{project.deployments[0].containerPort} <ExternalLink className="h-3 w-3" />
-                </a>
-              </span>
+            {editingSubdomain ? (
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-400" />
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={newSubdomain}
+                    onChange={(e) => setNewSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                    className="w-40 py-1 text-sm"
+                    placeholder="subdomain"
+                  />
+                  <span className="text-slate-500">.{baseDomain}</span>
+                  {subdomainAvailable === true && <Check className="h-4 w-4 text-green-400" />}
+                  {subdomainAvailable === false && <X className="h-4 w-4 text-red-400" />}
+                  <Button size="sm" onClick={handleSubdomainSave} loading={subdomainSaving} disabled={!subdomainAvailable}>Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingSubdomain(false)}>Cancel</Button>
+                </div>
+                {subdomainError && <span className="text-red-400 text-xs">{subdomainError}</span>}
+              </div>
             ) : (
               <span className="flex items-center gap-1">
-                <Globe className="h-4 w-4" />
-                <span className="text-slate-500">{project.subdomain}.clouddabba.dev</span>
+                <Globe className="h-4 w-4 text-green-400" />
+                <a href={subdomainUrl} target="_blank" className="text-green-400 hover:underline flex items-center gap-1">
+                  {project.subdomain}.{baseDomain} <ExternalLink className="h-3 w-3" />
+                </a>
+                <button onClick={() => { setEditingSubdomain(true); setNewSubdomain(project.subdomain); }} className="text-slate-500 hover:text-blue-400 ml-1">
+                  <Edit3 className="h-3 w-3" />
+                </button>
               </span>
             )}
             <span className="flex items-center gap-1"><GitBranch className="h-4 w-4" /> {project.branch}</span>

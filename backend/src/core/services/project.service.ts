@@ -1,24 +1,43 @@
 import prisma from '../../database/connection';
 import { AppError } from '../types';
 
+// Reserved subdomains that can't be used
+const RESERVED_SUBDOMAINS = ['www', 'api', 'app', 'admin', 'mail', 'ftp', 'ns1', 'ns2', 'panel', 'dashboard', 'login', 'signup', 'auth'];
+
+function sanitizeSubdomain(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 63);
+}
+
+function generateRandomSuffix(): string {
+  return Math.random().toString(36).substring(2, 6);
+}
+
 export class ProjectService {
   static async create(userId: string, data: {
     name: string;
     repoUrl: string;
     branch?: string;
     projectType: string;
+    subdomain?: string;
     envVars?: Record<string, string>;
   }) {
-    const subdomain = data.name
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .substring(0, 63);
+    let subdomain = sanitizeSubdomain(data.subdomain || data.name);
 
-    const existing = await prisma.project.findUnique({ where: { subdomain } });
-    if (existing) {
-      throw new AppError('A project with this subdomain already exists', 409);
+    // Check reserved
+    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
+      subdomain = `${subdomain}-${generateRandomSuffix()}`;
+    }
+
+    // Check availability, add random suffix if taken
+    let existing = await prisma.project.findUnique({ where: { subdomain } });
+    while (existing) {
+      subdomain = `${sanitizeSubdomain(data.name)}-${generateRandomSuffix()}`;
+      existing = await prisma.project.findUnique({ where: { subdomain } });
     }
 
     return prisma.project.create({
@@ -102,5 +121,38 @@ export class ProjectService {
       where: { id: projectId },
       data: { envVars },
     });
+  }
+
+  static async updateSubdomain(projectId: string, userId: string, newSubdomain: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+
+    const subdomain = sanitizeSubdomain(newSubdomain);
+    if (!subdomain || subdomain.length < 3) {
+      throw new AppError('Subdomain must be at least 3 characters', 400);
+    }
+    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
+      throw new AppError('This subdomain is reserved', 400);
+    }
+
+    const existing = await prisma.project.findUnique({ where: { subdomain } });
+    if (existing && existing.id !== projectId) {
+      throw new AppError('This subdomain is already taken', 409);
+    }
+
+    return prisma.project.update({
+      where: { id: projectId },
+      data: { subdomain },
+    });
+  }
+
+  static async checkSubdomain(subdomain: string): Promise<boolean> {
+    const sanitized = sanitizeSubdomain(subdomain);
+    if (!sanitized || sanitized.length < 3 || RESERVED_SUBDOMAINS.includes(sanitized)) {
+      return false;
+    }
+    const existing = await prisma.project.findUnique({ where: { subdomain: sanitized } });
+    return !existing;
   }
 }

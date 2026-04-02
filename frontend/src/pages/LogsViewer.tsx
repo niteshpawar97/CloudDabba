@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getDeployment, getDeploymentLogs } from '../api/deployments';
+import { getConfig } from '../api/config';
 import { useDeploymentLogs } from '../hooks/useDeploymentLogs';
 import { Deployment } from '../types/deployment';
 import { LogLine } from '../types/log';
 import { LogTerminal } from '../components/LogTerminal';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Spinner } from '../components/ui/Spinner';
-import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
 
 interface DeploymentWithProject extends Deployment {
   project?: {
@@ -21,13 +22,12 @@ interface DeploymentWithProject extends Deployment {
   };
 }
 
-function DeploymentReport({ deployment }: { deployment: DeploymentWithProject }) {
+function DeploymentReport({ deployment, baseDomain }: { deployment: DeploymentWithProject; baseDomain: string }) {
   const project = deployment.project;
   if (!project) return null;
 
-  const subdomain = `${project.subdomain}.clouddabba.dev`;
+  const subdomain = `${project.subdomain}.${baseDomain}`;
   const subdomainUrl = `https://${subdomain}`;
-  const directUrl = deployment.containerPort ? `http://129.159.16.65:${deployment.containerPort}` : null;
   const isLive = deployment.status === 'LIVE';
   const isFailed = deployment.status === 'FAILED';
   const duration = deployment.finishedAt && deployment.startedAt
@@ -82,49 +82,15 @@ function DeploymentReport({ deployment }: { deployment: DeploymentWithProject })
       <div className="border-t border-slate-700 pt-4 space-y-2">
         <div className="text-slate-500 text-xs uppercase font-medium">Access</div>
 
-        {/* Subdomain */}
+        {/* Subdomain URL */}
         <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
           <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-slate-300">Subdomain</span>
+            <Globe className="h-4 w-4 text-green-400" />
+            <span className="text-sm text-slate-300">URL</span>
           </div>
-          <div className="flex items-center gap-2">
-            <a href={subdomainUrl} target="_blank" className="text-blue-400 text-sm hover:underline flex items-center gap-1">
-              {subdomain} <ExternalLink className="h-3 w-3" />
-            </a>
-            {isLive ? (
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
-            ) : null}
-          </div>
-        </div>
-
-        {/* Direct Port Access */}
-        {directUrl && (
-          <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
-            <div className="flex items-center gap-2">
-              <Server className="h-4 w-4 text-green-400" />
-              <span className="text-sm text-slate-300">Direct Access</span>
-            </div>
-            <a href={directUrl} target="_blank" className="text-green-400 text-sm hover:underline flex items-center gap-1">
-              {directUrl} <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        )}
-
-        {/* Port */}
-        {deployment.containerPort && (
-          <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
-            <span className="text-sm text-slate-300">Container Port</span>
-            <span className="text-white font-mono text-sm">{deployment.containerPort}</span>
-          </div>
-        )}
-
-        {/* SSL Status */}
-        <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
-          <span className="text-sm text-slate-300">SSL Status</span>
-          <span className="flex items-center gap-1 text-amber-400 text-sm">
-            <AlertTriangle className="h-3 w-3" /> Wildcard SSL required
-          </span>
+          <a href={subdomainUrl} target="_blank" className="text-green-400 text-sm hover:underline flex items-center gap-1">
+            {subdomain} <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
 
         {/* Container Status */}
@@ -152,7 +118,12 @@ export function LogsViewer() {
   const [deployment, setDeployment] = useState<DeploymentWithProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [historicalLogs, setHistoricalLogs] = useState<LogLine[]>([]);
+  const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
   const { lines: liveLines, isConnected, isComplete } = useDeploymentLogs(deploymentId);
+
+  useEffect(() => {
+    getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (deploymentId) {
@@ -223,7 +194,7 @@ export function LogsViewer() {
       </div>
 
       {/* Deployment Report Card */}
-      {showReport && deployment && <DeploymentReport deployment={deployment} />}
+      {showReport && deployment && <DeploymentReport deployment={deployment} baseDomain={baseDomain} />}
 
       <LogTerminal lines={allLines} className="flex-1" />
     </div>

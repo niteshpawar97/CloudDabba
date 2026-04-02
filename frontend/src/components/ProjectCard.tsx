@@ -2,13 +2,13 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from './ui/Card';
 import { DeploymentStatusBadge } from './DeploymentStatusBadge';
 import { Project } from '../types/project';
-import { Deployment } from '../types/deployment';
-import { GitBranch, Globe, Clock, Server } from 'lucide-react';
+import { GitBranch, Globe, Clock } from 'lucide-react';
 
-export function ProjectCard({ project }: { project: Project }) {
+export function ProjectCard({ project, baseDomain }: { project: Project; baseDomain?: string }) {
   const navigate = useNavigate();
-  const latestDeploy = project.deployments?.[0] as (Deployment | undefined);
-  const directUrl = latestDeploy?.containerPort ? `http://129.159.16.65:${latestDeploy.containerPort}` : null;
+  const latestDeploy = project.deployments?.[0];
+  const domain = baseDomain || 'clouddabba.dev';
+  const subdomainUrl = `https://${project.subdomain}.${domain}`;
 
   return (
     <Card onClick={() => navigate(`/projects/${project.id}`)} className="hover:border-blue-500/50">
@@ -18,17 +18,17 @@ export function ProjectCard({ project }: { project: Project }) {
       </div>
 
       <div className="space-y-2 text-sm text-slate-400">
-        {directUrl && latestDeploy?.status === 'LIVE' ? (
-          <div className="flex items-center gap-2">
-            <Server className="h-4 w-4 text-green-400" />
-            <a href={directUrl} target="_blank" onClick={(e) => e.stopPropagation()} className="text-green-400 hover:underline">{directUrl}</a>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4" />
-            <span className="text-blue-400">{project.subdomain}.clouddabba.dev</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Globe className="h-4 w-4 text-green-400" />
+          <a
+            href={subdomainUrl}
+            target="_blank"
+            onClick={(e) => e.stopPropagation()}
+            className="text-green-400 hover:underline"
+          >
+            {project.subdomain}.{domain}
+          </a>
+        </div>
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
           <span>{project.branch}</span>

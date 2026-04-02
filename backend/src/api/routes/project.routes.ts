@@ -15,6 +15,10 @@ router.get('/:id', authenticate, ProjectController.getById);
 router.put('/:id', authenticate, updateProjectValidator, validate, ProjectController.update);
 router.delete('/:id', authenticate, ProjectController.delete);
 router.put('/:id/env', authenticate, envVarsValidator, validate, ProjectController.updateEnvVars);
+router.put('/:id/subdomain', authenticate, ProjectController.updateSubdomain);
+
+// Check subdomain availability
+router.get('/check-subdomain/:subdomain', authenticate, ProjectController.checkSubdomain);
 
 // Deploy & Deployments under project
 router.post('/:id/deploy', authenticate, deployLimiter, DeploymentController.triggerDeploy);

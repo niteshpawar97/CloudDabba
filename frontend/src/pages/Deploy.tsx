@@ -9,7 +9,8 @@ import { ProjectType } from '../types/project';
 import { getBranches } from '../api/github';
 import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
-import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText } from 'lucide-react';
+import { getConfig, checkSubdomain } from '../api/config';
+import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X } from 'lucide-react';
 
 function parseEnvString(text: string): { key: string; value: string }[] {
   return text
@@ -42,11 +43,18 @@ export function Deploy() {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [projectName, setProjectName] = useState('');
   const [projectType, setProjectType] = useState<ProjectType>('NODE_BACKEND');
+  const [subdomain, setSubdomain] = useState('');
+  const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
+  const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState('');
   const [envMode, setEnvMode] = useState<'manual' | 'paste' | null>(null);
   const [pasteText, setPasteText] = useState('');
+
+  useEffect(() => {
+    getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
+  }, []);
 
   // Pre-fill from URL params
   useEffect(() => {
@@ -56,14 +64,30 @@ export function Deploy() {
     if (repoUrl && name) {
       setSelectedRepo({ cloneUrl: repoUrl, name, defaultBranch: branch || 'main', fullName: name } as Repository);
       setProjectName(name);
+      setSubdomain(name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-'));
       setSelectedBranch(branch || 'main');
       setStep(3);
     }
   }, [searchParams]);
 
+  // Check subdomain availability
+  useEffect(() => {
+    if (!subdomain || subdomain.length < 3) {
+      setSubdomainAvailable(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      checkSubdomain(subdomain)
+        .then((res) => setSubdomainAvailable(res.available))
+        .catch(() => setSubdomainAvailable(null));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [subdomain]);
+
   const handleRepoSelect = async (repo: Repository) => {
     setSelectedRepo(repo);
     setProjectName(repo.name);
+    setSubdomain(repo.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-'));
     setSelectedBranch(repo.defaultBranch);
 
     const [owner, repoName] = repo.fullName.split('/');
@@ -115,6 +139,7 @@ export function Deploy() {
         repoUrl: selectedRepo.cloneUrl,
         branch: selectedBranch,
         projectType,
+        subdomain: subdomain || undefined,
         envVars: Object.keys(envObj).length > 0 ? envObj : undefined,
       });
 
@@ -185,6 +210,33 @@ export function Deploy() {
           {error && <div className="bg-red-900/30 border border-red-700 text-red-400 text-sm rounded-lg p-3">{error}</div>}
 
           <Input label="Project Name" value={projectName} onChange={(e) => setProjectName(e.target.value)} required />
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Subdomain</label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative">
+                <Input
+                  value={subdomain}
+                  onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="my-app"
+                  className="pr-8"
+                />
+                {subdomainAvailable === true && (
+                  <Check className="absolute right-3 top-2.5 h-4 w-4 text-green-400" />
+                )}
+                {subdomainAvailable === false && (
+                  <X className="absolute right-3 top-2.5 h-4 w-4 text-red-400" />
+                )}
+              </div>
+              <span className="text-slate-500 text-sm">.{baseDomain}</span>
+            </div>
+            {subdomainAvailable === false && (
+              <p className="text-red-400 text-xs mt-1">This subdomain is already taken</p>
+            )}
+            {subdomainAvailable === true && (
+              <p className="text-green-400 text-xs mt-1">{subdomain}.{baseDomain} is available</p>
+            )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Project Type</label>

@@ -70,4 +70,23 @@ export class ProjectController {
       next(error);
     }
   }
+
+  static async updateSubdomain(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { subdomain } = req.body;
+      const project = await ProjectService.updateSubdomain(req.params.id as string, req.user!.id, subdomain);
+      sendSuccess(res, project, 'Subdomain updated');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async checkSubdomain(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const available = await ProjectService.checkSubdomain(req.params.subdomain as string);
+      sendSuccess(res, { available, subdomain: req.params.subdomain });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

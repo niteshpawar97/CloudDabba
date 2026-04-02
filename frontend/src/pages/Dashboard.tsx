@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getProjects } from '../api/projects';
+import { getConfig } from '../api/config';
 import { Project } from '../types/project';
 import { ProjectCard } from '../components/ProjectCard';
 import { Button } from '../components/ui/Button';
@@ -10,6 +11,7 @@ import { Rocket, FolderOpen, CheckCircle, XCircle } from 'lucide-react';
 export function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -17,6 +19,7 @@ export function Dashboard() {
       .then(setProjects)
       .catch(() => {})
       .finally(() => setLoading(false));
+    getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
   }, []);
 
   const activeCount = projects.filter((p) => p.status === 'ACTIVE').length;
@@ -72,7 +75,7 @@ export function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard key={project.id} project={project} baseDomain={baseDomain} />
           ))}
         </div>
       )}

@@ -95,7 +95,7 @@ Frontend runs on **http://localhost:5173**
 ## Testing the Full Flow
 
   Demo login:
-  Email:    demo@clouddabba.com
+  Email:    demo@clouddabba.dev
   Password: demo1234
 
 
