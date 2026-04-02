@@ -6,6 +6,7 @@ import { Search, Trash2, Shield, User } from 'lucide-react';
 
 export function AdminUsers() {
   const [data, setData] = useState<any>({ users: [], pagination: {} });
+  const [, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 

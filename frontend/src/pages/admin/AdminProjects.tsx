@@ -8,6 +8,7 @@ export function AdminProjects() {
   const [tab, setTab] = useState<'projects' | 'deployments'>('projects');
   const [projects, setProjects] = useState<any>({ projects: [], pagination: {} });
   const [deployments, setDeployments] = useState<any>({ deployments: [], pagination: {} });
+  const [, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
