@@ -72,13 +72,16 @@ export class DeploymentService {
       const buildType = project.projectType || detectedType;
       await DockerService.copyDockerfile(buildDir, buildType);
 
-      // Prepare build args for fullstack projects
+      // Reorganize fullstack projects into standard backend/ + frontend/ structure
       const buildArgs: Record<string, string> = {};
       const projectConfig = project.envVars as any;
       if (buildType === 'FULLSTACK') {
-        buildArgs.BACKEND_PATH = projectConfig?.backendPath || 'backend';
-        buildArgs.FRONTEND_PATH = projectConfig?.frontendPath || 'frontend';
-        await LogService.createLog(deploymentId, 'BUILD', `Fullstack: backend=/${buildArgs.BACKEND_PATH}, frontend=/${buildArgs.FRONTEND_PATH}`);
+        const backendPath = projectConfig?.backendPath || 'backend';
+        const frontendPath = projectConfig?.frontendPath || 'frontend';
+        await LogService.createLog(deploymentId, 'BUILD', `Fullstack detected: backend=/${backendPath}, frontend=/${frontendPath}`);
+
+        await this.reorganizeFullstack(buildDir, backendPath, frontendPath);
+        await LogService.createLog(deploymentId, 'BUILD', 'Reorganized into standard /backend + /frontend structure');
       }
 
       // Step 3: Build Docker image
@@ -187,6 +190,57 @@ export class DeploymentService {
       // Cleanup build directory
       await fs.rm(buildDir, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  /**
+   * Reorganize any repo structure into standard backend/ + frontend/ layout.
+   * Handles cases like: backend=".", frontend="client" → moves to backend/ and frontend/
+   */
+  private static async reorganizeFullstack(buildDir: string, backendPath: string, frontendPath: string) {
+    const tmpDir = path.join(buildDir, '_clouddabba_tmp');
+    const tmpBackend = path.join(tmpDir, 'backend');
+    const tmpFrontend = path.join(tmpDir, 'frontend');
+
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.mkdir(tmpBackend, { recursive: true });
+    await fs.mkdir(tmpFrontend, { recursive: true });
+
+    const srcFrontend = path.join(buildDir, frontendPath);
+    const srcBackend = path.join(buildDir, backendPath);
+
+    // Step 1: Copy frontend first (before backend, in case frontend is nested inside backend path)
+    const frontendEntries = await fs.readdir(srcFrontend);
+    for (const entry of frontendEntries) {
+      if (entry === '_clouddabba_tmp') continue;
+      await fs.cp(path.join(srcFrontend, entry), path.join(tmpFrontend, entry), { recursive: true });
+    }
+
+    // Step 2: Copy backend
+    const backendEntries = await fs.readdir(srcBackend);
+    for (const entry of backendEntries) {
+      // Skip tmp dir, frontend dir (if nested), Dockerfile, .git
+      if (entry === '_clouddabba_tmp') continue;
+      if (entry === '.git') continue;
+      // If backend is root (.) and frontend is a subfolder, skip the frontend folder from backend copy
+      if (backendPath === '.' && entry === frontendPath) continue;
+      await fs.cp(path.join(srcBackend, entry), path.join(tmpBackend, entry), { recursive: true });
+    }
+
+    // Step 3: Clear buildDir (keep .git and Dockerfile)
+    const allEntries = await fs.readdir(buildDir);
+    for (const entry of allEntries) {
+      if (entry === '_clouddabba_tmp' || entry === '.git' || entry === 'Dockerfile') continue;
+      await fs.rm(path.join(buildDir, entry), { recursive: true, force: true });
+    }
+
+    // Step 4: Move standardized dirs into buildDir
+    await fs.rename(tmpBackend, path.join(buildDir, 'backend'));
+    await fs.rename(tmpFrontend, path.join(buildDir, 'frontend'));
+
+    // Cleanup
+    await fs.rm(tmpDir, { recursive: true, force: true });
+
+    logger.info(`Reorganized fullstack: ${backendPath} → /backend, ${frontendPath} → /frontend`);
   }
 
   private static async updateStatus(deploymentId: string, status: string) {
