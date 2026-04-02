@@ -6,20 +6,34 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database...');
 
-  // Create demo user
-  const hashedPassword = await bcrypt.hash('demo1234', 12);
+  const adminPassword = await bcrypt.hash('admin@123', 12);
+  const demoPassword = await bcrypt.hash('demo1234', 12);
 
-  const user = await prisma.user.upsert({
+  // Create admin user
+  const admin = await (prisma.user.upsert as any)({
+    where: { email: 'admin@clouddabba.dev' },
+    update: { role: 'admin' },
+    create: {
+      name: 'Admin',
+      email: 'admin@clouddabba.dev',
+      password: adminPassword,
+      role: 'admin',
+    },
+  });
+  console.log(`Admin: ${admin.email} (password: admin@123)`);
+
+  // Create demo user
+  const user = await (prisma.user.upsert as any)({
     where: { email: 'demo@clouddabba.dev' },
     update: {},
     create: {
       name: 'Demo User',
       email: 'demo@clouddabba.dev',
-      password: hashedPassword,
+      password: demoPassword,
+      role: 'user',
     },
   });
-
-  console.log(`Created user: ${user.email} (password: demo1234)`);
+  console.log(`User:  ${user.email} (password: demo1234)`);
 
   // Create sample project
   const project = await prisma.project.upsert({
@@ -35,14 +49,22 @@ async function main() {
       branch: 'main',
     },
   });
+  console.log(`Project: ${project.name} (${project.subdomain})`);
 
-  console.log(`Created project: ${project.name} (${project.subdomain})`);
-
-  console.log('\nSeed complete!');
-  console.log('---');
-  console.log('Demo login:');
-  console.log('  Email:    demo@clouddabba.dev');
-  console.log('  Password: demo1234');
+  console.log('\n=============================');
+  console.log('  Seed complete!');
+  console.log('=============================');
+  console.log('');
+  console.log('  Admin Panel:');
+  console.log('    URL:      /admin');
+  console.log('    Email:    admin@clouddabba.dev');
+  console.log('    Password: admin@123');
+  console.log('');
+  console.log('  User Panel:');
+  console.log('    URL:      /dashboard');
+  console.log('    Email:    demo@clouddabba.dev');
+  console.log('    Password: demo1234');
+  console.log('');
 }
 
 main()
