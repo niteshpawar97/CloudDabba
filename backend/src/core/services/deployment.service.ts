@@ -98,8 +98,10 @@ export class DeploymentService {
       const containerPort = DockerService.getContainerPort(buildType);
       const containerName = `cd-${project.subdomain}-${deploymentId.slice(0, 8)}`;
 
-      // Parse env vars
-      const envVars: Record<string, string> = project.envVars ? (project.envVars as Record<string, string>) : {};
+      // Parse env vars — force PORT to match our container port
+      const envVars: Record<string, string> = project.envVars ? { ...(project.envVars as Record<string, string>) } : {};
+      envVars['PORT'] = String(containerPort);
+      delete envVars['port'];
 
       const container = await DockerService.createAndStartContainer(
         imageTag,
