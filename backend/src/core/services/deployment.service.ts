@@ -66,7 +66,8 @@ export class DeploymentService {
       await this.updateStatus(deploymentId, 'BUILDING');
       const detection = await GitHubService.detectProjectType(buildDir);
       const detectedType = detection.type;
-      await LogService.createLog(deploymentId, 'SYSTEM', `Detected project type: ${detectedType} (${detection.reason})`);
+      const tsLabel = detection.isTypeScript ? ' [TypeScript]' : '';
+      await LogService.createLog(deploymentId, 'SYSTEM', `Detected project type: ${detectedType}${tsLabel} (${detection.reason})`);
 
       // Use project's stored type if manually set, otherwise use detected
       const buildType = project.projectType || detectedType;
@@ -76,9 +77,10 @@ export class DeploymentService {
       const buildArgs: Record<string, string> = {};
       const projectConfig = project.envVars as any;
       if (buildType === 'FULLSTACK') {
-        const backendPath = projectConfig?.backendPath || 'backend';
-        const frontendPath = projectConfig?.frontendPath || 'frontend';
-        await LogService.createLog(deploymentId, 'BUILD', `Fullstack detected: backend=/${backendPath}, frontend=/${frontendPath}`);
+        // Priority: project config > auto-detection > defaults
+        const backendPath = projectConfig?.backendPath || detection.structure?.backendPath || 'backend';
+        const frontendPath = projectConfig?.frontendPath || detection.structure?.frontendPath || 'frontend';
+        await LogService.createLog(deploymentId, 'BUILD', `Fullstack: backend=/${backendPath}, frontend=/${frontendPath}`);
 
         await this.reorganizeFullstack(buildDir, backendPath, frontendPath);
         await LogService.createLog(deploymentId, 'BUILD', 'Reorganized into standard /backend + /frontend structure');
@@ -194,9 +196,22 @@ export class DeploymentService {
 
   /**
    * Reorganize any repo structure into standard backend/ + frontend/ layout.
-   * Handles cases like: backend=".", frontend="client" → moves to backend/ and frontend/
+   * Handles: root-backend (backend=".", frontend="client"),
+   *          separate-dirs (backend="server", frontend="client"),
+   *          monorepo (backend="packages/api", frontend="packages/web"),
+   *          already-standard (backend="backend", frontend="frontend") → no-op
    */
   private static async reorganizeFullstack(buildDir: string, backendPath: string, frontendPath: string) {
+    // Already in standard structure — skip
+    if (backendPath === 'backend' && frontendPath === 'frontend') {
+      try {
+        await fs.access(path.join(buildDir, 'backend'));
+        await fs.access(path.join(buildDir, 'frontend'));
+        logger.info('Already standard backend/ + frontend/ structure, skipping reorganization');
+        return;
+      } catch {}
+    }
+
     const tmpDir = path.join(buildDir, '_clouddabba_tmp');
     const tmpBackend = path.join(tmpDir, 'backend');
     const tmpFrontend = path.join(tmpDir, 'frontend');
@@ -208,25 +223,25 @@ export class DeploymentService {
     const srcFrontend = path.join(buildDir, frontendPath);
     const srcBackend = path.join(buildDir, backendPath);
 
-    // Step 1: Copy frontend first (before backend, in case frontend is nested inside backend path)
+    // Step 1: Copy frontend (handles nested paths like packages/web)
     const frontendEntries = await fs.readdir(srcFrontend);
     for (const entry of frontendEntries) {
-      if (entry === '_clouddabba_tmp') continue;
+      if (entry === '_clouddabba_tmp' || entry === 'node_modules') continue;
       await fs.cp(path.join(srcFrontend, entry), path.join(tmpFrontend, entry), { recursive: true });
     }
 
     // Step 2: Copy backend
     const backendEntries = await fs.readdir(srcBackend);
     for (const entry of backendEntries) {
-      // Skip tmp dir, frontend dir (if nested), Dockerfile, .git
-      if (entry === '_clouddabba_tmp') continue;
-      if (entry === '.git') continue;
-      // If backend is root (.) and frontend is a subfolder, skip the frontend folder from backend copy
-      if (backendPath === '.' && entry === frontendPath) continue;
+      if (entry === '_clouddabba_tmp' || entry === '.git' || entry === 'node_modules') continue;
+      // If backend is root (.) skip the frontend folder and CloudDabba files
+      if (backendPath === '.') {
+        if (entry === frontendPath || entry === 'Dockerfile' || entry.startsWith('fullstack-')) continue;
+      }
       await fs.cp(path.join(srcBackend, entry), path.join(tmpBackend, entry), { recursive: true });
     }
 
-    // Step 3: Clear buildDir (keep .git and Dockerfile)
+    // Step 3: Clear buildDir (keep .git, Dockerfile, and fullstack support files)
     const allEntries = await fs.readdir(buildDir);
     for (const entry of allEntries) {
       if (entry === '_clouddabba_tmp' || entry === '.git' || entry === 'Dockerfile' || entry.startsWith('fullstack-')) continue;

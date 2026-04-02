@@ -17,14 +17,28 @@ RUN apk add --no-cache nginx
 
 WORKDIR /app
 COPY backend/ ./
-RUN npm install --legacy-peer-deps --only=production
+RUN npm install --legacy-peer-deps
+
+# Auto-detect TypeScript and build backend
+RUN if [ -f tsconfig.json ]; then \
+      echo "[CloudDabba] TypeScript backend detected, building..." && \
+      if grep -q '"build"' package.json 2>/dev/null; then \
+        npm run build; \
+      else \
+        npx tsc; \
+      fi && \
+      echo "[CloudDabba] TypeScript build complete"; \
+    fi
+
+# Remove devDependencies for smaller image
+RUN npm prune --production --legacy-peer-deps 2>/dev/null; true
 
 # Frontend → nginx
 COPY --from=frontend-build /frontend-out /usr/share/nginx/html
 RUN rm -rf /usr/share/nginx/html/50x.html 2>/dev/null; true
 RUN chmod -R 755 /usr/share/nginx/html
 
-# Nginx config + start script (separate files, no heredoc issues)
+# Nginx config + start script
 COPY fullstack-nginx.conf /etc/nginx/http.d/default.conf
 COPY fullstack-start.sh /app/_start.sh
 RUN chmod +x /app/_start.sh

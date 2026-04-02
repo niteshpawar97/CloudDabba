@@ -4,6 +4,20 @@ import { GitHubService } from '../../core/services/github.service';
 import { AuthRequest } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 
+const FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'web-app', 'webapp', 'site'];
+const BACKEND_DIRS = ['backend', 'server', 'api', 'service', 'services', 'app-server'];
+
+const FRONTEND_FRAMEWORKS: Record<string, string> = {
+  'next': 'nextjs', 'react': 'react', 'react-dom': 'react', 'vue': 'vue',
+  'nuxt': 'nuxt', '@angular/core': 'angular', 'svelte': 'svelte',
+  '@sveltejs/kit': 'sveltekit', 'solid-js': 'solid', 'astro': 'astro', 'gatsby': 'gatsby',
+};
+const BACKEND_FRAMEWORKS: Record<string, string> = {
+  'express': 'express', 'fastify': 'fastify', 'koa': 'koa',
+  '@nestjs/core': 'nestjs', '@hapi/hapi': 'hapi', 'hapi': 'hapi',
+  'restify': 'restify', '@adonisjs/core': 'adonis',
+};
+
 async function fetchGitHubJSON(url: string, pat: string, raw = false) {
   const res = await fetch(url, {
     headers: {
@@ -15,21 +29,28 @@ async function fetchGitHubJSON(url: string, pat: string, raw = false) {
   return raw ? res.text() : res.json();
 }
 
-async function scanPackageJson(owner: string, repo: string, path: string, pat: string) {
+async function scanPackageJson(owner: string, repo: string, pkgPath: string, pat: string) {
   try {
-    const pkgPath = path ? `${path}/package.json` : 'package.json';
+    const fullPath = pkgPath ? `${pkgPath}/package.json` : 'package.json';
     const content = await fetchGitHubJSON(
-      `https://api.github.com/repos/${owner}/${repo}/contents/${pkgPath}`,
+      `https://api.github.com/repos/${owner}/${repo}/contents/${fullPath}`,
       pat, true
     );
     if (!content) return null;
     const pkg = JSON.parse(content as string);
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
     const scripts = pkg.scripts || {};
-    return { deps, scripts, name: pkg.name };
+    return { deps, scripts, name: pkg.name, workspaces: pkg.workspaces };
   } catch {
     return null;
   }
+}
+
+function findFramework(deps: Record<string, string>, frameworks: Record<string, string>): string | null {
+  for (const [pkg, name] of Object.entries(frameworks)) {
+    if (deps[pkg]) return name;
+  }
+  return null;
 }
 
 export class GitHubController {
@@ -37,12 +58,17 @@ export class GitHubController {
     try {
       const owner = req.params.owner as string;
       const repo = req.params.repo as string;
-      const pat = await AuthService.getDecryptedPAT(req.user!.id);
+
+      let pat = '';
+      try {
+        pat = await AuthService.getDecryptedPAT(req.user!.id);
+      } catch {}
 
       const detection: any = {
         type: 'STATIC_SITE',
         confidence: 'low',
         reason: 'Unable to scan',
+        isTypeScript: false,
         structure: null,
       };
 
@@ -56,14 +82,50 @@ export class GitHubController {
         const fileNames = contents.map((f: any) => f.name);
         const dirs = contents.filter((f: any) => f.type === 'dir').map((f: any) => f.name);
 
-        // --- Check Dockerfile ---
+        // Detect TypeScript
+        const isTS = fileNames.includes('tsconfig.json') || fileNames.includes('tsconfig.build.json');
+        detection.isTypeScript = isTS;
+
+        // --- Custom Dockerfile ---
         if (fileNames.includes('Dockerfile')) {
           detection.type = 'CUSTOM_DOCKERFILE';
           detection.confidence = 'high';
           detection.reason = 'Dockerfile found in root';
+          sendSuccess(res, detection);
+          return;
         }
-        // --- Check root package.json ---
-        else if (fileNames.includes('package.json')) {
+
+        // --- Check for separate /backend + /frontend dirs ---
+        const backendDir = dirs.find((d: string) => BACKEND_DIRS.includes(d));
+        const frontendDir = dirs.find((d: string) => FRONTEND_DIRS.includes(d));
+
+        if (backendDir && frontendDir) {
+          const [backPkg, frontPkg] = await Promise.all([
+            scanPackageJson(owner, repo, backendDir, pat),
+            scanPackageJson(owner, repo, frontendDir, pat),
+          ]);
+
+          const backFramework = backPkg?.deps ? findFramework(backPkg.deps, BACKEND_FRAMEWORKS) : null;
+          const frontFramework = frontPkg?.deps ? findFramework(frontPkg.deps, FRONTEND_FRAMEWORKS) : null;
+          const hasTsBackend = backPkg?.deps?.['typescript'] || backPkg?.deps?.['ts-node'];
+
+          detection.type = 'FULLSTACK';
+          detection.confidence = 'high';
+          detection.isTypeScript = isTS || !!hasTsBackend;
+          detection.reason = `/${backendDir} (${backFramework || 'node'}) + /${frontendDir} (${frontFramework || 'unknown'})`;
+          detection.structure = {
+            pattern: 'separate-dirs',
+            backendPath: backendDir,
+            frontendPath: frontendDir,
+            backendFramework: backFramework,
+            frontendFramework: frontFramework,
+          };
+          sendSuccess(res, detection);
+          return;
+        }
+
+        // --- Root package.json ---
+        if (fileNames.includes('package.json')) {
           const rootPkg = await scanPackageJson(owner, repo, '', pat);
           if (rootPkg) {
             const { deps, scripts } = rootPkg;
@@ -73,102 +135,116 @@ export class GitHubController {
               detection.type = 'NEXTJS_APP';
               detection.confidence = 'high';
               detection.reason = `Next.js ${deps['next'] || ''} detected`;
+              sendSuccess(res, detection);
+              return;
             }
-            // React (no backend framework) = pure frontend
-            else if ((deps['react'] || deps['react-dom']) && !deps['express'] && !deps['fastify'] && !deps['@nestjs/core']) {
-              const hasVite = deps['vite'] || deps['@vitejs/plugin-react'];
-              detection.type = 'REACT_FRONTEND';
-              detection.confidence = 'high';
-              detection.reason = hasVite ? 'React + Vite' : 'React app';
-            }
-            // Backend framework + has frontend folder = FULLSTACK (root=backend, subfolder=frontend)
-            else if ((deps['express'] || deps['fastify'] || deps['@nestjs/core']) &&
-                     dirs.some((d: string) => ['client', 'frontend', 'web', 'ui', 'app', 'public', 'views'].includes(d))) {
-              const frontendDir = dirs.find((d: string) => ['client', 'frontend', 'web', 'ui'].includes(d));
-              const framework = deps['express'] ? 'Express' : deps['fastify'] ? 'Fastify' : 'NestJS';
+
+            const detectedBackend = findFramework(deps, BACKEND_FRAMEWORKS);
+            const detectedFrontend = findFramework(deps, FRONTEND_FRAMEWORKS);
+
+            // Backend + frontend subfolder = FULLSTACK (root-backend pattern)
+            if (detectedBackend && frontendDir) {
+              const frontPkg = await scanPackageJson(owner, repo, frontendDir, pat);
+              const frontFramework = frontPkg?.deps ? findFramework(frontPkg.deps, FRONTEND_FRAMEWORKS) : null;
+
               detection.type = 'FULLSTACK';
               detection.confidence = 'high';
-              detection.reason = `${framework} + frontend in /${frontendDir || 'subfolder'}`;
+              detection.reason = `${detectedBackend} backend + frontend in /${frontendDir}`;
               detection.structure = {
                 pattern: 'root-backend',
                 backendPath: '.',
-                frontendPath: frontendDir || 'client',
-                backendFramework: framework.toLowerCase(),
-                frontendFramework: null,
+                frontendPath: frontendDir,
+                backendFramework: detectedBackend,
+                frontendFramework: frontFramework,
               };
+              sendSuccess(res, detection);
+              return;
+            }
 
-              // Scan frontend subfolder for React/Next etc
-              if (frontendDir) {
-                const frontPkg = await scanPackageJson(owner, repo, frontendDir, pat);
-                if (frontPkg?.deps['next']) {
-                  detection.structure.frontendFramework = 'nextjs';
-                } else if (frontPkg?.deps['react']) {
-                  detection.structure.frontendFramework = frontPkg.deps['vite'] ? 'react-vite' : 'react';
+            // Monorepo (workspaces)
+            if (rootPkg.workspaces) {
+              const workspaces: string[] = Array.isArray(rootPkg.workspaces)
+                ? rootPkg.workspaces : (rootPkg.workspaces?.packages || []);
+
+              for (const ws of workspaces) {
+                const wsBase = ws.replace('/*', '').replace('/**', '');
+                if (dirs.includes(wsBase)) {
+                  const wsContents = await fetchGitHubJSON(
+                    `https://api.github.com/repos/${owner}/${repo}/contents/${wsBase}`,
+                    pat
+                  ) as any[];
+
+                  if (wsContents && Array.isArray(wsContents)) {
+                    const wsDirs = wsContents.filter((f: any) => f.type === 'dir').map((f: any) => f.name);
+                    const wsBackend = wsDirs.find((d: string) => BACKEND_DIRS.includes(d) || d.includes('api') || d.includes('server'));
+                    const wsFrontend = wsDirs.find((d: string) => FRONTEND_DIRS.includes(d) || d.includes('web') || d.includes('client'));
+
+                    if (wsBackend && wsFrontend) {
+                      const [bPkg, fPkg] = await Promise.all([
+                        scanPackageJson(owner, repo, `${wsBase}/${wsBackend}`, pat),
+                        scanPackageJson(owner, repo, `${wsBase}/${wsFrontend}`, pat),
+                      ]);
+
+                      detection.type = 'FULLSTACK';
+                      detection.confidence = 'high';
+                      detection.reason = `Monorepo: /${wsBase}/${wsBackend} + /${wsBase}/${wsFrontend}`;
+                      detection.structure = {
+                        pattern: 'monorepo',
+                        backendPath: `${wsBase}/${wsBackend}`,
+                        frontendPath: `${wsBase}/${wsFrontend}`,
+                        backendFramework: bPkg?.deps ? findFramework(bPkg.deps, BACKEND_FRAMEWORKS) : null,
+                        frontendFramework: fPkg?.deps ? findFramework(fPkg.deps, FRONTEND_FRAMEWORKS) : null,
+                      };
+                      sendSuccess(res, detection);
+                      return;
+                    }
+                  }
                 }
               }
             }
+
             // Pure backend
-            else if (deps['express'] || deps['fastify'] || deps['koa'] || deps['@nestjs/core']) {
-              const framework = deps['express'] ? 'Express' : deps['fastify'] ? 'Fastify' : deps['@nestjs/core'] ? 'NestJS' : 'Node.js';
+            if (detectedBackend) {
               detection.type = 'NODE_BACKEND';
               detection.confidence = 'high';
-              detection.reason = `${framework} backend`;
+              detection.reason = `${detectedBackend} backend detected`;
+              sendSuccess(res, detection);
+              return;
             }
-            // Has start script = probably Node
-            else if (scripts['start'] || scripts['dev']) {
+
+            // Pure frontend
+            if (detectedFrontend && detectedFrontend !== 'nextjs') {
+              const hasVite = deps['vite'] || deps['@vitejs/plugin-react'] || deps['@vitejs/plugin-vue'];
+              detection.type = 'REACT_FRONTEND';
+              detection.confidence = 'high';
+              detection.reason = `${detectedFrontend}${hasVite ? ' + Vite' : ''} frontend`;
+              sendSuccess(res, detection);
+              return;
+            }
+
+            // Has start script
+            if (scripts['start'] || scripts['dev']) {
               detection.type = 'NODE_BACKEND';
               detection.confidence = 'medium';
               detection.reason = 'Node.js project with start script';
+              sendSuccess(res, detection);
+              return;
             }
           }
         }
 
-        // --- Check for separate /backend + /frontend dirs ---
-        if (detection.type === 'STATIC_SITE' || detection.confidence === 'low') {
-          const backendDir = dirs.find((d: string) => ['backend', 'server', 'api'].includes(d));
-          const frontendDir = dirs.find((d: string) => ['frontend', 'client', 'web', 'ui', 'app'].includes(d));
-
-          if (backendDir && frontendDir) {
-            detection.type = 'FULLSTACK';
-            detection.confidence = 'high';
-            detection.reason = `/${backendDir} + /${frontendDir} directories`;
-            detection.structure = {
-              pattern: 'separate-dirs',
-              backendPath: backendDir,
-              frontendPath: frontendDir,
-              backendFramework: null,
-              frontendFramework: null,
-            };
-
-            // Scan each subfolder
-            const [backPkg, frontPkg] = await Promise.all([
-              scanPackageJson(owner, repo, backendDir, pat),
-              scanPackageJson(owner, repo, frontendDir, pat),
-            ]);
-
-            if (backPkg?.deps) {
-              detection.structure.backendFramework = backPkg.deps['express'] ? 'express' :
-                backPkg.deps['fastify'] ? 'fastify' : backPkg.deps['@nestjs/core'] ? 'nestjs' : 'node';
-            }
-            if (frontPkg?.deps) {
-              detection.structure.frontendFramework = frontPkg.deps['next'] ? 'nextjs' :
-                frontPkg.deps['react'] ? (frontPkg.deps['vite'] ? 'react-vite' : 'react') : 'unknown';
-            }
-
-            detection.reason = `/${backendDir} (${detection.structure.backendFramework || 'node'}) + /${frontendDir} (${detection.structure.frontendFramework || 'unknown'})`;
-          }
-          // Only frontend-like dir
-          else if (frontendDir && !backendDir) {
-            detection.type = 'REACT_FRONTEND';
-            detection.confidence = 'medium';
-            detection.reason = `Frontend in /${frontendDir}`;
-            detection.structure = { pattern: 'subfolder-frontend', frontendPath: frontendDir };
-          }
+        // --- Fallback: only frontend dir ---
+        if (frontendDir && !backendDir) {
+          detection.type = 'REACT_FRONTEND';
+          detection.confidence = 'medium';
+          detection.reason = `Frontend in /${frontendDir}`;
+          detection.structure = { pattern: 'subfolder-frontend', frontendPath: frontendDir };
         }
 
         // --- Fallback: HTML files ---
-        if (detection.type === 'STATIC_SITE' && detection.confidence === 'low') {
+        if (detection.confidence === 'low') {
           if (fileNames.includes('index.html') || fileNames.some((f: string) => f.endsWith('.html'))) {
+            detection.type = 'STATIC_SITE';
             detection.confidence = 'high';
             detection.reason = 'HTML files found';
           }

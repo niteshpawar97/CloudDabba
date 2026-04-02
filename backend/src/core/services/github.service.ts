@@ -7,6 +7,48 @@ import logger from '../../shared/utils/logger';
 
 const execFileAsync = promisify(execFile);
 
+// Common directory name patterns
+const FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'web-app', 'webapp', 'site'];
+const BACKEND_DIRS = ['backend', 'server', 'api', 'service', 'services', 'app-server'];
+const FRONTEND_FRAMEWORKS: Record<string, string> = {
+  'next': 'nextjs',
+  'react': 'react',
+  'react-dom': 'react',
+  'vue': 'vue',
+  'nuxt': 'nuxt',
+  '@angular/core': 'angular',
+  'svelte': 'svelte',
+  '@sveltejs/kit': 'sveltekit',
+  'solid-js': 'solid',
+  'astro': 'astro',
+  'gatsby': 'gatsby',
+};
+const BACKEND_FRAMEWORKS: Record<string, string> = {
+  'express': 'express',
+  'fastify': 'fastify',
+  'koa': 'koa',
+  '@nestjs/core': 'nestjs',
+  '@hapi/hapi': 'hapi',
+  'hapi': 'hapi',
+  'restify': 'restify',
+  'adonis': 'adonis',
+  '@adonisjs/core': 'adonis',
+};
+
+interface DetectionResult {
+  type: string;
+  confidence: string;
+  reason: string;
+  isTypeScript?: boolean;
+  structure?: {
+    pattern: string;
+    backendPath: string;
+    frontendPath: string;
+    backendFramework: string | null;
+    frontendFramework: string | null;
+  };
+}
+
 export class GitHubService {
   static async listRepos(pat: string) {
     const repos: any[] = [];
@@ -81,11 +123,10 @@ export class GitHubService {
   static async cloneRepo(pat: string, repoUrl: string, branch: string, destPath: string): Promise<string> {
     await fs.mkdir(destPath, { recursive: true });
 
-    // Insert PAT into URL for private repo access (skip for public repos)
     const authenticatedUrl = pat ? repoUrl.replace('https://', `https://${pat}@`) : repoUrl;
 
     try {
-      const { stdout } = await execFileAsync('git', [
+      await execFileAsync('git', [
         'clone',
         '--branch', branch,
         '--depth', '1',
@@ -95,7 +136,6 @@ export class GitHubService {
 
       logger.info(`Cloned repo to ${destPath}`);
 
-      // Get commit hash
       const { stdout: hash } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: destPath });
       return hash.trim();
     } catch (error: any) {
@@ -103,7 +143,11 @@ export class GitHubService {
     }
   }
 
-  static async detectProjectType(repoPath: string): Promise<{ type: string; confidence: string; reason: string }> {
+  /**
+   * Detect project type from cloned repository on disk.
+   * Handles: TypeScript, monorepo, fullstack, various frameworks.
+   */
+  static async detectProjectType(repoPath: string): Promise<DetectionResult> {
     const entries = await fs.readdir(repoPath);
 
     // Check for custom Dockerfile first
@@ -111,7 +155,36 @@ export class GitHubService {
       return { type: 'CUSTOM_DOCKERFILE', confidence: 'high', reason: 'Dockerfile found in root' };
     }
 
-    // Check for package.json
+    // Detect TypeScript
+    const isTypeScript = entries.includes('tsconfig.json') ||
+      entries.includes('tsconfig.build.json') ||
+      entries.some(f => f.endsWith('.ts') && f !== 'next-env.d.ts');
+
+    // Check for fullstack: separate backend/ + frontend/ dirs
+    const backendDir = entries.find(e => BACKEND_DIRS.includes(e));
+    const frontendDir = entries.find(e => FRONTEND_DIRS.includes(e));
+
+    if (backendDir && frontendDir) {
+      const backendFramework = await this.detectFrameworkInDir(path.join(repoPath, backendDir), 'backend');
+      const frontendFramework = await this.detectFrameworkInDir(path.join(repoPath, frontendDir), 'frontend');
+      const hasTsBackend = await this.hasTypeScript(path.join(repoPath, backendDir));
+
+      return {
+        type: 'FULLSTACK',
+        confidence: 'high',
+        reason: `/${backendDir} (${backendFramework || 'node'}) + /${frontendDir} (${frontendFramework || 'unknown'})`,
+        isTypeScript: hasTsBackend,
+        structure: {
+          pattern: 'separate-dirs',
+          backendPath: backendDir,
+          frontendPath: frontendDir,
+          backendFramework,
+          frontendFramework,
+        },
+      };
+    }
+
+    // Check root package.json
     if (entries.includes('package.json')) {
       try {
         const pkgContent = await fs.readFile(path.join(repoPath, 'package.json'), 'utf-8');
@@ -120,48 +193,74 @@ export class GitHubService {
         const scripts = pkg.scripts || {};
 
         // Check for Next.js
-        if (allDeps['next']) {
-          return { type: 'NEXTJS_APP', confidence: 'high', reason: `Next.js ${allDeps['next']} detected` };
+        if (allDeps['next'] || entries.includes('next.config.js') || entries.includes('next.config.mjs') || entries.includes('next.config.ts')) {
+          return { type: 'NEXTJS_APP', confidence: 'high', reason: `Next.js ${allDeps['next'] || ''} detected`, isTypeScript };
         }
 
-        // Check for Next.js config file
-        if (entries.includes('next.config.js') || entries.includes('next.config.mjs') || entries.includes('next.config.ts')) {
-          return { type: 'NEXTJS_APP', confidence: 'high', reason: 'next.config found' };
-        }
+        // Detect backend framework
+        const detectedBackend = this.findFramework(allDeps, BACKEND_FRAMEWORKS);
+        // Detect frontend framework
+        const detectedFrontend = this.findFramework(allDeps, FRONTEND_FRAMEWORKS);
 
-        // Check for React (Vite/CRA)
-        if (allDeps['react'] || allDeps['react-dom']) {
-          // Check if it's a pure frontend (no server-side code)
-          const hasVite = allDeps['vite'] || allDeps['@vitejs/plugin-react'];
-          const hasCRA = allDeps['react-scripts'];
-          if (hasVite || hasCRA) {
-            return { type: 'REACT_FRONTEND', confidence: 'high', reason: hasVite ? 'React + Vite detected' : 'Create React App detected' };
+        // Backend + frontend subfolder = FULLSTACK (root-backend pattern)
+        if (detectedBackend) {
+          const clientDir = entries.find(e => FRONTEND_DIRS.includes(e));
+          if (clientDir) {
+            const clientFramework = await this.detectFrameworkInDir(path.join(repoPath, clientDir), 'frontend');
+            return {
+              type: 'FULLSTACK',
+              confidence: 'high',
+              reason: `${detectedBackend} backend + frontend in /${clientDir}`,
+              isTypeScript,
+              structure: {
+                pattern: 'root-backend',
+                backendPath: '.',
+                frontendPath: clientDir,
+                backendFramework: detectedBackend,
+                frontendFramework: clientFramework,
+              },
+            };
           }
-          return { type: 'REACT_FRONTEND', confidence: 'medium', reason: 'React dependencies found' };
+
+          // Pure backend
+          return {
+            type: 'NODE_BACKEND',
+            confidence: 'high',
+            reason: `${detectedBackend} backend detected`,
+            isTypeScript,
+          };
         }
 
-        // Check for fullstack (has both backend and frontend dirs)
-        if (entries.includes('backend') && entries.includes('frontend')) {
-          return { type: 'FULLSTACK', confidence: 'high', reason: '/backend and /frontend directories found' };
+        // Pure frontend (React, Vue, Svelte, etc.)
+        if (detectedFrontend && detectedFrontend !== 'nextjs') {
+          const hasVite = allDeps['vite'] || allDeps['@vitejs/plugin-react'] || allDeps['@vitejs/plugin-vue'];
+          const hasCRA = allDeps['react-scripts'];
+          return {
+            type: 'REACT_FRONTEND',
+            confidence: 'high',
+            reason: `${detectedFrontend}${hasVite ? ' + Vite' : hasCRA ? ' + CRA' : ''} frontend`,
+            isTypeScript,
+          };
         }
 
-        // Check for Express/Fastify/Koa (backend frameworks)
-        if (allDeps['express'] || allDeps['fastify'] || allDeps['koa'] || allDeps['hapi'] || allDeps['nestjs']) {
-          return { type: 'NODE_BACKEND', confidence: 'high', reason: `${allDeps['express'] ? 'Express' : allDeps['fastify'] ? 'Fastify' : 'Node.js'} backend detected` };
+        // Monorepo detection (workspaces)
+        if (pkg.workspaces) {
+          const monorepoResult = await this.detectMonorepo(repoPath, pkg, isTypeScript);
+          if (monorepoResult) return monorepoResult;
         }
 
-        // Has package.json with start script = Node backend
-        if (scripts['start'] || scripts['dev']) {
-          return { type: 'NODE_BACKEND', confidence: 'medium', reason: 'Node.js project with start script' };
+        // Has start script = Node backend
+        if (scripts['start'] || scripts['dev'] || scripts['serve']) {
+          return {
+            type: 'NODE_BACKEND',
+            confidence: 'medium',
+            reason: 'Node.js project with start script',
+            isTypeScript,
+          };
         }
 
-        return { type: 'NODE_BACKEND', confidence: 'low', reason: 'package.json found, assumed Node.js' };
+        return { type: 'NODE_BACKEND', confidence: 'low', reason: 'package.json found, assumed Node.js', isTypeScript };
       } catch {}
-    }
-
-    // Check for fullstack directories without root package.json
-    if (entries.includes('backend') && entries.includes('frontend')) {
-      return { type: 'FULLSTACK', confidence: 'high', reason: '/backend and /frontend directories found' };
     }
 
     // Check for static files
@@ -170,5 +269,113 @@ export class GitHubService {
     }
 
     return { type: 'STATIC_SITE', confidence: 'low', reason: 'No recognizable project structure' };
+  }
+
+  /**
+   * Detect framework from a subdirectory's package.json
+   */
+  private static async detectFrameworkInDir(dirPath: string, role: 'frontend' | 'backend'): Promise<string | null> {
+    try {
+      const pkgPath = path.join(dirPath, 'package.json');
+      const content = await fs.readFile(pkgPath, 'utf-8');
+      const pkg = JSON.parse(content);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      const frameworks = role === 'frontend' ? FRONTEND_FRAMEWORKS : BACKEND_FRAMEWORKS;
+      return this.findFramework(deps, frameworks);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Find the first matching framework from dependencies
+   */
+  private static findFramework(deps: Record<string, string>, frameworks: Record<string, string>): string | null {
+    for (const [pkg, name] of Object.entries(frameworks)) {
+      if (deps[pkg]) return name;
+    }
+    return null;
+  }
+
+  /**
+   * Check if a directory has TypeScript
+   */
+  private static async hasTypeScript(dirPath: string): Promise<boolean> {
+    try {
+      const entries = await fs.readdir(dirPath);
+      if (entries.includes('tsconfig.json')) return true;
+      const pkgPath = path.join(dirPath, 'package.json');
+      const content = await fs.readFile(pkgPath, 'utf-8');
+      const pkg = JSON.parse(content);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      return !!(deps['typescript'] || deps['ts-node']);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Detect monorepo with workspaces → find backend + frontend packages
+   */
+  private static async detectMonorepo(repoPath: string, pkg: any, isTypeScript: boolean): Promise<DetectionResult | null> {
+    try {
+      const workspaces: string[] = Array.isArray(pkg.workspaces)
+        ? pkg.workspaces
+        : (pkg.workspaces?.packages || []);
+
+      // Resolve workspace patterns to actual directories
+      const allDirs: string[] = [];
+      for (const ws of workspaces) {
+        const wsBase = ws.replace('/*', '').replace('/**', '');
+        try {
+          const entries = await fs.readdir(path.join(repoPath, wsBase), { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              allDirs.push(path.join(wsBase, entry.name));
+            }
+          }
+        } catch {
+          // Direct workspace path (not a glob)
+          allDirs.push(wsBase);
+        }
+      }
+
+      let backendPath: string | null = null;
+      let frontendPath: string | null = null;
+      let backendFramework: string | null = null;
+      let frontendFramework: string | null = null;
+
+      for (const dir of allDirs) {
+        const dirName = path.basename(dir).toLowerCase();
+        const fullPath = path.join(repoPath, dir);
+
+        // Check if it's a backend or frontend package
+        if (BACKEND_DIRS.includes(dirName) || dirName.includes('api') || dirName.includes('server')) {
+          backendPath = dir;
+          backendFramework = await this.detectFrameworkInDir(fullPath, 'backend');
+        } else if (FRONTEND_DIRS.includes(dirName) || dirName.includes('web') || dirName.includes('client')) {
+          frontendPath = dir;
+          frontendFramework = await this.detectFrameworkInDir(fullPath, 'frontend');
+        }
+      }
+
+      if (backendPath && frontendPath) {
+        return {
+          type: 'FULLSTACK',
+          confidence: 'high',
+          reason: `Monorepo: /${backendPath} (${backendFramework || 'node'}) + /${frontendPath} (${frontendFramework || 'unknown'})`,
+          isTypeScript,
+          structure: {
+            pattern: 'monorepo',
+            backendPath,
+            frontendPath,
+            backendFramework,
+            frontendFramework,
+          },
+        };
+      }
+    } catch {}
+
+    return null;
   }
 }
