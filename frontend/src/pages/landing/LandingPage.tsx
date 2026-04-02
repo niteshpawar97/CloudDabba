@@ -1,6 +1,7 @@
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { Hero } from './Hero';
 import { Features } from './Features';
+import { SmartDetection } from './SmartDetection';
 import { HowItWorks } from './HowItWorks';
 import { UseCases } from './UseCases';
 import { Comparison } from './Comparison';
@@ -24,6 +25,7 @@ export function LandingPage() {
         <Navbar />
         <Hero />
         <Features />
+        <SmartDetection />
         <HowItWorks />
         <UseCases />
         <Comparison />

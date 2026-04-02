@@ -1,22 +1,24 @@
 import { motion } from 'framer-motion';
-import { GitFork, Code, Rocket } from 'lucide-react';
+import { GitFork, Scan, Rocket } from 'lucide-react';
 
 const steps = [
   {
     step: '01',
     icon: GitFork,
-    title: 'Connect GitHub',
-    description: 'Add your GitHub Personal Access Token. CloudDabba fetches your repos instantly.',
+    title: 'Connect Your Repo',
+    description: 'Link your GitHub account or paste any public repo URL. CloudDabba supports private repos, public repos, and ZIP uploads.',
     visual: (
       <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-4 font-mono text-xs">
-        <div className="text-slate-500 mb-1">github.com/your-repos</div>
+        <div className="text-slate-500 mb-2">Select deployment source</div>
         <div className="space-y-1.5">
-          {['my-saas-app', 'portfolio-site', 'api-server'].map((name, i) => (
-            <div key={name} className="flex items-center justify-between px-2 py-1.5 rounded bg-white/5">
-              <span className="text-slate-300">{name}</span>
-              <span className={`text-xs ${i === 0 ? 'text-blue-400' : 'text-slate-600'}`}>
-                {i === 0 ? 'Select' : ''}
-              </span>
+          {[
+            { name: 'GitHub Private', tag: 'PAT', active: true },
+            { name: 'Public Repo URL', tag: 'URL', active: false },
+            { name: 'Upload ZIP', tag: 'ZIP', active: false },
+          ].map((src) => (
+            <div key={src.name} className={`flex items-center justify-between px-3 py-2 rounded ${src.active ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-white/5'}`}>
+              <span className={src.active ? 'text-blue-400' : 'text-slate-400'}>{src.name}</span>
+              <span className="text-[10px] text-slate-600 bg-white/5 px-1.5 py-0.5 rounded">{src.tag}</span>
             </div>
           ))}
         </div>
@@ -25,18 +27,19 @@ const steps = [
   },
   {
     step: '02',
-    icon: Code,
-    title: 'Push Your Code',
-    description: 'Push to your branch. CloudDabba auto-detects project type and builds the perfect Docker image.',
+    icon: Scan,
+    title: 'Smart Auto-Detection',
+    description: 'CloudDabba scans your code, detects frameworks (React, Express, NestJS...), identifies TypeScript, and reorganizes any folder structure into a standard layout.',
     visual: (
       <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-4 font-mono text-xs space-y-1">
-        <div className="text-slate-500">$ git push origin main</div>
-        <div className="text-blue-400">Detecting project type...</div>
-        <div className="text-green-400">Next.js ^16 detected</div>
-        <div className="text-purple-400">Building Docker image...</div>
-        <div className="text-slate-500">Step 1/6 : FROM node:22-alpine</div>
-        <div className="text-slate-500">Step 2/6 : COPY package*.json ./</div>
-        <div className="text-green-400">Build complete (48s)</div>
+        <div className="text-slate-500">Scanning repository...</div>
+        <div className="text-amber-400">Detected: FULLSTACK [TypeScript]</div>
+        <div className="text-slate-500">  backend: Express (./server)</div>
+        <div className="text-slate-500">  frontend: React + Vite (./client)</div>
+        <div className="text-purple-400">Reorganizing → /backend + /frontend</div>
+        <div className="text-blue-400">TypeScript detected, building...</div>
+        <div className="text-slate-500">Building Docker image...</div>
+        <div className="text-green-400">Build complete (42s)</div>
       </div>
     ),
   },
@@ -44,12 +47,13 @@ const steps = [
     step: '03',
     icon: Rocket,
     title: 'App Goes Live',
-    description: 'Container starts, SSL configures, subdomain routes. Your app is live with a custom URL.',
+    description: 'Container starts, SSL configures automatically, subdomain routes. Your app is live with HTTPS — frontend served via nginx, API proxied to backend.',
     visual: (
       <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-4 font-mono text-xs space-y-1">
         <div className="text-green-400">Container started on port 10000</div>
         <div className="text-blue-400">SSL: Secured (HTTPS)</div>
-        <div className="text-purple-400">Subdomain: myapp.clouddabba.dev</div>
+        <div className="text-slate-500">Frontend: nginx → /</div>
+        <div className="text-slate-500">Backend:  proxy → /api</div>
         <div className="mt-2 pt-2 border-t border-white/5">
           <div className="text-green-300 font-semibold">Deployment successful!</div>
           <div className="text-cyan-400">https://myapp.clouddabba.dev</div>
