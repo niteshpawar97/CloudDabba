@@ -43,6 +43,12 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-slate-700/50">
+        {user?.role === 'admin' && (
+          <NavLink to="/admin" className="flex items-center gap-2 text-sm text-red-400/70 hover:text-red-400 mb-3 transition-colors">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+            Admin Panel
+          </NavLink>
+        )}
         <div className="text-sm text-slate-400 mb-3 truncate">{user?.email}</div>
         <button
           onClick={logout}

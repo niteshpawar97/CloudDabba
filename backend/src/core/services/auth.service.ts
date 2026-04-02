@@ -39,6 +39,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: (user as any).role || 'user',
         hasPAT: !!user.githubPatEncrypted,
         createdAt: user.createdAt,
       },
@@ -47,9 +48,9 @@ export class AuthService {
   }
 
   static async getProfile(userId: string) {
-    const user = await prisma.user.findUnique({
+    const user = await (prisma.user.findUnique as any)({
       where: { id: userId },
-      select: { id: true, name: true, email: true, githubPatEncrypted: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, githubPatEncrypted: true, createdAt: true },
     });
     if (!user) {
       throw new AppError('User not found', 404);
@@ -58,6 +59,7 @@ export class AuthService {
       id: user.id,
       name: user.name,
       email: user.email,
+      role: user.role || 'user',
       hasPAT: !!user.githubPatEncrypted,
       createdAt: user.createdAt,
     };

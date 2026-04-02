@@ -12,6 +12,15 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { Deploy } from './pages/Deploy';
 import { LogsViewer } from './pages/LogsViewer';
 
+// Admin
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { AdminUsers } from './pages/admin/AdminUsers';
+import { AdminProjects } from './pages/admin/AdminProjects';
+import { AdminContainers } from './pages/admin/AdminContainers';
+import { AdminLogs } from './pages/admin/AdminLogs';
+import { AdminSettings } from './pages/admin/AdminSettings';
+
 function App() {
   return (
     <AuthProvider>
@@ -26,7 +35,7 @@ function App() {
             <Route path="/signup" element={<Signup />} />
           </Route>
 
-          {/* Protected dashboard */}
+          {/* Protected user dashboard */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -35,6 +44,16 @@ function App() {
               <Route path="/deploy" element={<Deploy />} />
               <Route path="/logs/:deploymentId" element={<LogsViewer />} />
             </Route>
+          </Route>
+
+          {/* Admin panel (role checked inside AdminLayout) */}
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/projects" element={<AdminProjects />} />
+            <Route path="/admin/containers" element={<AdminContainers />} />
+            <Route path="/admin/logs" element={<AdminLogs />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

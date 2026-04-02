@@ -1,0 +1,276 @@
+import { Response, NextFunction } from 'express';
+import prisma from '../../database/connection';
+import docker from '../../infrastructure/docker/docker-client';
+import { AuthRequest, AppError } from '../../core/types';
+import { sendSuccess } from '../../shared/utils/api-response';
+import { DockerService } from '../../core/services/docker.service';
+import logger from '../../shared/utils/logger';
+
+export class AdminController {
+  // Dashboard stats
+  static async getStats(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const [totalUsers, totalProjects, totalDeployments, liveDeployments, failedDeployments] = await Promise.all([
+        prisma.user.count(),
+        prisma.project.count(),
+        prisma.deployment.count(),
+        prisma.deployment.count({ where: { status: 'LIVE' as any } }),
+        prisma.deployment.count({ where: { status: 'FAILED' as any } }),
+      ]);
+
+      // Docker stats
+      let containers = 0;
+      let images = 0;
+      try {
+        const containerList = await docker.listContainers({ all: true, filters: { label: ['clouddabba.managed=true'] } });
+        containers = containerList.length;
+        const imageList = await docker.listImages();
+        images = imageList.filter((img: any) => img.RepoTags?.some((t: string) => t.startsWith('clouddabba/'))).length;
+      } catch {}
+
+      // Recent deployments for chart (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const recentDeployments = await prisma.deployment.findMany({
+        where: { startedAt: { gte: sevenDaysAgo } },
+        select: { startedAt: true, status: true },
+        orderBy: { startedAt: 'asc' },
+      });
+
+      // Group by day
+      const deploymentsByDay: Record<string, { date: string; total: number; success: number; failed: number }> = {};
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        deploymentsByDay[key] = { date: key, total: 0, success: 0, failed: 0 };
+      }
+      for (const dep of recentDeployments) {
+        const key = dep.startedAt.toISOString().split('T')[0];
+        if (deploymentsByDay[key]) {
+          deploymentsByDay[key].total++;
+          if (dep.status === 'LIVE') deploymentsByDay[key].success++;
+          if (dep.status === 'FAILED') deploymentsByDay[key].failed++;
+        }
+      }
+
+      sendSuccess(res, {
+        stats: {
+          totalUsers,
+          totalProjects,
+          totalDeployments,
+          liveDeployments,
+          failedDeployments,
+          containers,
+          images,
+        },
+        chartData: Object.values(deploymentsByDay),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // List all users
+  static async listUsers(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const search = (req.query.search as string) || '';
+
+      const where: any = {};
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const [users, total] = await Promise.all([
+        (prisma.user.findMany as any)({
+          where,
+          select: {
+            id: true, name: true, email: true, role: true, createdAt: true,
+            githubPatEncrypted: true,
+            _count: { select: { projects: true } },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.user.count({ where }),
+      ]);
+
+      const formatted = users.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        hasPAT: !!u.githubPatEncrypted,
+        projectCount: u._count.projects,
+        createdAt: u.createdAt,
+      }));
+
+      sendSuccess(res, { users: formatted, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Update user role
+  static async updateUserRole(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { role } = req.body;
+      if (!['user', 'admin'].includes(role)) {
+        throw new AppError('Invalid role', 400);
+      }
+      const user = await (prisma.user.update as any)({
+        where: { id: req.params.id as string },
+        data: { role },
+        select: { id: true, name: true, email: true, role: true },
+      });
+      sendSuccess(res, user, 'User role updated');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Delete user
+  static async deleteUser(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (req.params.id === req.user!.id) {
+        throw new AppError('Cannot delete yourself', 400);
+      }
+      await prisma.user.delete({ where: { id: req.params.id as string } });
+      sendSuccess(res, null, 'User deleted');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // List all projects (all users)
+  static async listAllProjects(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+
+      const [projects, total] = await Promise.all([
+        prisma.project.findMany({
+          include: {
+            user: { select: { name: true, email: true } },
+            deployments: { take: 1, orderBy: { startedAt: 'desc' } },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { updatedAt: 'desc' },
+        }),
+        prisma.project.count(),
+      ]);
+
+      sendSuccess(res, { projects, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // List all deployments
+  static async listAllDeployments(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const status = req.query.status as string;
+
+      const where: any = {};
+      if (status) where.status = status;
+
+      const [deployments, total] = await Promise.all([
+        prisma.deployment.findMany({
+          where,
+          include: {
+            project: { select: { name: true, subdomain: true, user: { select: { name: true } } } },
+          },
+          skip: (page - 1) * limit,
+          take: limit,
+          orderBy: { startedAt: 'desc' },
+        }),
+        prisma.deployment.count({ where }),
+      ]);
+
+      sendSuccess(res, { deployments, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Docker containers list
+  static async listContainers(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const containers = await docker.listContainers({ all: true, filters: { label: ['clouddabba.managed=true'] } });
+      const formatted = containers.map((c: any) => ({
+        id: c.Id.slice(0, 12),
+        name: c.Names[0]?.replace('/', ''),
+        image: c.Image,
+        state: c.State,
+        status: c.Status,
+        ports: c.Ports?.map((p: any) => `${p.PublicPort || ''}:${p.PrivatePort}`).filter(Boolean),
+        created: new Date(c.Created * 1000).toISOString(),
+      }));
+      sendSuccess(res, formatted);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Stop container
+  static async stopContainer(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DockerService.stopContainer(req.params.id as string);
+      sendSuccess(res, null, 'Container stopped');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Recent activity
+  static async getActivity(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const recentDeployments = await prisma.deployment.findMany({
+        take: 20,
+        orderBy: { startedAt: 'desc' },
+        include: {
+          project: { select: { name: true, subdomain: true, user: { select: { name: true } } } },
+        },
+      });
+
+      const activity = recentDeployments.map((d) => ({
+        id: d.id,
+        type: 'deployment',
+        status: d.status,
+        project: d.project.name,
+        subdomain: d.project.subdomain,
+        user: d.project.user.name,
+        timestamp: d.startedAt,
+      }));
+
+      sendSuccess(res, activity);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Platform settings
+  static async getSettings(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { config } = require('../../shared/config/app.config');
+      sendSuccess(res, {
+        domain: config.domain.base,
+        port: config.app.port,
+        environment: config.app.nodeEnv,
+        portRange: `${config.ports.rangeStart}-${config.ports.rangeEnd}`,
+        corsOrigin: config.cors.origin,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
