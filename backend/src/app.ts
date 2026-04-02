@@ -15,7 +15,10 @@ const app = express();
 // Trust proxy (NGINX / Vite proxy) — get real client IP
 app.set('trust proxy', 1);
 
-// Security
+// Subdomain proxy FIRST — before helmet/cors/etc so deployed apps get clean responses
+app.use(subdomainProxy);
+
+// Security (only applies to CloudDabba panel, not deployed apps)
 app.use(helmet());
 app.use(cors({ origin: config.cors.origin, credentials: true }));
 
@@ -30,9 +33,6 @@ app.use(compression());
 if (config.app.nodeEnv !== 'test') {
   app.use(morgan('dev'));
 }
-
-// Subdomain proxy — route *.clouddabba.dev to containers
-app.use(subdomainProxy);
 
 // Rate limiting
 app.use(generalLimiter);
