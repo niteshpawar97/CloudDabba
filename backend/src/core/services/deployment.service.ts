@@ -229,7 +229,7 @@ export class DeploymentService {
     // Step 3: Clear buildDir (keep .git and Dockerfile)
     const allEntries = await fs.readdir(buildDir);
     for (const entry of allEntries) {
-      if (entry === '_clouddabba_tmp' || entry === '.git' || entry === 'Dockerfile') continue;
+      if (entry === '_clouddabba_tmp' || entry === '.git' || entry === 'Dockerfile' || entry.startsWith('fullstack-')) continue;
       await fs.rm(path.join(buildDir, entry), { recursive: true, force: true });
     }
 
