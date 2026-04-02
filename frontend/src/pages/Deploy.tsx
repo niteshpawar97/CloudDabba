@@ -7,10 +7,11 @@ import { Button } from '../components/ui/Button';
 import { Repository, Branch } from '../types/github';
 import { ProjectType } from '../types/project';
 import { getBranches, scanRepo } from '../api/github';
+import { scanPublicRepo, uploadZip } from '../api/source';
 import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
 import { getConfig, checkSubdomain } from '../api/config';
-import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X } from 'lucide-react';
+import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe } from 'lucide-react';
 
 function parseEnvString(text: string): { key: string; value: string }[] {
   return text
@@ -38,6 +39,9 @@ export function Deploy() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
+  const [sourceType, setSourceType] = useState<'github' | 'public' | 'zip'>('github');
+  const [publicRepoUrl, setPublicRepoUrl] = useState('');
+  const [zipUploading, setZipUploading] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -117,6 +121,50 @@ export function Deploy() {
     setStep(2);
   };
 
+  const handlePublicRepo = async () => {
+    if (!publicRepoUrl) return;
+    setScanning(true);
+    try {
+      const result = await scanPublicRepo(publicRepoUrl);
+      const repoName = publicRepoUrl.split('/').pop()?.replace('.git', '') || 'my-app';
+      setSelectedRepo({ cloneUrl: result.repoUrl, name: repoName, fullName: repoName, defaultBranch: result.branch } as Repository);
+      setProjectName(repoName);
+      setSubdomain(repoName.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
+      setSelectedBranch(result.branch);
+      if (result.detection) {
+        setDetectedType(result.detection);
+        setProjectType(result.detection.type as ProjectType);
+      }
+      setStep(3);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to scan repo');
+    }
+    setScanning(false);
+  };
+
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setZipUploading(true);
+    setError('');
+    try {
+      const result = await uploadZip(file);
+      const name = file.name.replace(/\.(zip|tar\.gz|tgz)$/i, '');
+      setSelectedRepo({ cloneUrl: '', name, fullName: name, defaultBranch: 'main' } as Repository);
+      setProjectName(name);
+      setSubdomain(name.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
+      if (result.detection) {
+        setDetectedType(result.detection);
+        setProjectType(result.detection.type as ProjectType);
+      }
+      setStep(3);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Upload failed');
+    }
+    setZipUploading(false);
+    e.target.value = '';
+  };
+
   const handlePasteApply = () => {
     const parsed = parseEnvString(pasteText);
     if (parsed.length === 0) return;
@@ -176,16 +224,6 @@ export function Deploy() {
     }
   };
 
-  if (!user?.hasPAT) {
-    return (
-      <div className="text-center py-16">
-        <h2 className="text-xl font-bold text-white mb-2">GitHub not connected</h2>
-        <p className="text-slate-400 mb-4">Add your GitHub PAT first to deploy repositories</p>
-        <Button onClick={() => navigate('/github')}>Connect GitHub</Button>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-8">
@@ -202,8 +240,74 @@ export function Deploy() {
 
       {step === 1 && (
         <div>
-          <h2 className="text-lg font-semibold text-white mb-4">1. Select Repository</h2>
-          <RepoSelector onSelect={handleRepoSelect} selected={selectedRepo} />
+          <h2 className="text-lg font-semibold text-white mb-4">1. Choose Source</h2>
+
+          {/* Source type tabs */}
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => setSourceType('github')}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium border transition-all ${sourceType === 'github' ? 'bg-blue-600/20 border-blue-500/50 text-blue-400' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+              <GitBranch className="h-4 w-4 mx-auto mb-1" />
+              GitHub (Private)
+            </button>
+            <button onClick={() => setSourceType('public')}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium border transition-all ${sourceType === 'public' ? 'bg-green-600/20 border-green-500/50 text-green-400' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+              <Globe className="h-4 w-4 mx-auto mb-1" />
+              Public Repo URL
+            </button>
+            <button onClick={() => setSourceType('zip')}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-medium border transition-all ${sourceType === 'zip' ? 'bg-purple-600/20 border-purple-500/50 text-purple-400' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+              <Upload className="h-4 w-4 mx-auto mb-1" />
+              Upload ZIP
+            </button>
+          </div>
+
+          {error && <div className="bg-red-900/30 border border-red-700 text-red-400 text-sm rounded-lg p-3 mb-4">{error}</div>}
+
+          {/* GitHub PAT repos */}
+          {sourceType === 'github' && (
+            user?.hasPAT ? (
+              <RepoSelector onSelect={handleRepoSelect} selected={selectedRepo} />
+            ) : (
+              <div className="text-center py-8 border border-dashed border-slate-700 rounded-xl">
+                <GitBranch className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+                <p className="text-slate-400 mb-2">GitHub not connected</p>
+                <p className="text-sm text-slate-500 mb-4">Add your PAT to access private repos</p>
+                <Button onClick={() => navigate('/github')} size="sm">Connect GitHub</Button>
+              </div>
+            )
+          )}
+
+          {/* Public repo URL */}
+          {sourceType === 'public' && (
+            <div className="space-y-4">
+              <Input
+                label="Public Repository URL"
+                value={publicRepoUrl}
+                onChange={(e) => setPublicRepoUrl(e.target.value)}
+                placeholder="https://github.com/user/repo"
+              />
+              <p className="text-xs text-slate-500">Paste any public GitHub, GitLab, or Bitbucket repository URL</p>
+              <Button onClick={handlePublicRepo} loading={scanning} disabled={!publicRepoUrl}>
+                <span className="flex items-center gap-2"><Rocket className="h-4 w-4" /> Scan & Continue</span>
+              </Button>
+            </div>
+          )}
+
+          {/* ZIP upload */}
+          {sourceType === 'zip' && (
+            <div className="space-y-4">
+              <label className="block">
+                <div className="border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-xl p-8 text-center cursor-pointer transition-colors">
+                  <Upload className="h-10 w-10 text-slate-500 mx-auto mb-3" />
+                  <p className="text-slate-300 font-medium mb-1">
+                    {zipUploading ? 'Uploading...' : 'Drop your project here or click to browse'}
+                  </p>
+                  <p className="text-xs text-slate-500">Supports .zip and .tar.gz (max 100MB)</p>
+                  <input type="file" accept=".zip,.tar.gz,.tgz" className="hidden" onChange={handleZipUpload} disabled={zipUploading} />
+                </div>
+              </label>
+            </div>
+          )}
         </div>
       )}
 

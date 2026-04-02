@@ -48,7 +48,12 @@ export class DeploymentService {
       await this.updateStatus(deploymentId, 'CLONING');
       await LogService.createLog(deploymentId, 'SYSTEM', `Cloning repository: ${project.repoUrl} (branch: ${project.branch})`);
 
-      const pat = await AuthService.getDecryptedPAT(userId);
+      let pat = '';
+      try {
+        pat = await AuthService.getDecryptedPAT(userId);
+      } catch {
+        // No PAT — clone as public repo
+      }
       const commitHash = await GitHubService.cloneRepo(pat, project.repoUrl, project.branch, buildDir);
 
       await prisma.deployment.update({

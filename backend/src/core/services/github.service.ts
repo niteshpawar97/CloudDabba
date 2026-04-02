@@ -81,8 +81,8 @@ export class GitHubService {
   static async cloneRepo(pat: string, repoUrl: string, branch: string, destPath: string): Promise<string> {
     await fs.mkdir(destPath, { recursive: true });
 
-    // Insert PAT into URL for private repo access
-    const authenticatedUrl = repoUrl.replace('https://', `https://${pat}@`);
+    // Insert PAT into URL for private repo access (skip for public repos)
+    const authenticatedUrl = pat ? repoUrl.replace('https://', `https://${pat}@`) : repoUrl;
 
     try {
       const { stdout } = await execFileAsync('git', [

@@ -4,6 +4,7 @@ import githubRoutes from './github.routes';
 import projectRoutes from './project.routes';
 import deploymentRoutes from './deployment.routes';
 import adminRoutes from './admin.routes';
+import sourceRoutes from './source.routes';
 
 const router = Router();
 
@@ -12,6 +13,7 @@ router.use('/github', githubRoutes);
 router.use('/projects', projectRoutes);
 router.use('/deployments', deploymentRoutes);
 router.use('/admin', adminRoutes);
+router.use('/source', sourceRoutes);
 
 // Health check
 router.get('/health', (_req, res) => {
