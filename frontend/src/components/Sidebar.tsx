@@ -4,7 +4,7 @@ import { LayoutDashboard, GitFork, Rocket, LogOut, Cloud } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/github', icon: GitFork, label: 'GitHub' },
   { to: '/deploy', icon: Rocket, label: 'Deploy' },
 ];
@@ -26,7 +26,7 @@ export function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/dashboard'}
             className={({ isActive }) =>
               clsx(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',

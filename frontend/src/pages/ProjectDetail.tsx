@@ -67,7 +67,7 @@ export function ProjectDetail() {
   const handleDelete = async () => {
     if (!project || !confirm('Delete this project? This will stop all containers.')) return;
     await deleteProject(project.id);
-    navigate('/');
+    navigate('/dashboard');
   };
 
   const handleSubdomainSave = async () => {

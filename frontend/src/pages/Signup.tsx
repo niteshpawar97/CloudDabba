@@ -19,7 +19,7 @@ export function Signup() {
     setLoading(true);
     try {
       await signup({ name, email, password });
-      navigate('/');
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Signup failed');
     } finally {

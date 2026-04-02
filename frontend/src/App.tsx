@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthLayout } from './layouts/AuthLayout';
 import { AppLayout } from './layouts/AppLayout';
+import { LandingPage } from './pages/landing/LandingPage';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
@@ -16,13 +17,19 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public landing page */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* Auth pages */}
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
           </Route>
+
+          {/* Protected dashboard */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/github" element={<GitHubIntegration />} />
               <Route path="/projects/:projectId" element={<ProjectDetail />} />
               <Route path="/deploy" element={<Deploy />} />
