@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { getUsers, updateUserRole, deleteUser } from '../../api/admin';
 import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Trash2, Shield, User } from 'lucide-react';
 
 export function AdminUsers() {
   const [data, setData] = useState<any>({ users: [], pagination: {} });
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 

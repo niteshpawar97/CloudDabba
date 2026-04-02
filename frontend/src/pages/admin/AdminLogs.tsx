@@ -9,7 +9,6 @@ export function AdminLogs() {
   const [deployments, setDeployments] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getAllDeployments(1, '').then((d) => {
