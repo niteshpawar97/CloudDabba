@@ -6,7 +6,6 @@ import { Deployment } from '../types/deployment';
 import { LogLine } from '../types/log';
 import { LogTerminal } from '../components/LogTerminal';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
-import { Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
@@ -94,7 +93,7 @@ function DeploymentReport({ deployment }: { deployment: DeploymentWithProject })
               {subdomain} <ExternalLink className="h-3 w-3" />
             </a>
             {isLive ? (
-              <AlertTriangle className="h-4 w-4 text-amber-400" title="SSL not configured" />
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
             ) : null}
           </div>
         </div>
