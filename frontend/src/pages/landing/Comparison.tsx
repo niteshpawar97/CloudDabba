@@ -47,18 +47,18 @@ export function Comparison() {
             <thead>
               <tr className="bg-white/[0.03]">
                 <th className="text-left py-4 px-6 font-medium text-slate-400">Feature</th>
-                <th className="py-4 px-4 font-semibold text-blue-400">CloudDabba</th>
-                <th className="py-4 px-4 font-medium text-slate-400">Vercel</th>
-                <th className="py-4 px-4 font-medium text-slate-400">Render</th>
+                <th className="py-4 px-4 font-semibold text-blue-400 text-center">CloudDabba</th>
+                <th className="py-4 px-4 font-medium text-slate-400 text-center">Vercel</th>
+                <th className="py-4 px-4 font-medium text-slate-400 text-center">Render</th>
               </tr>
             </thead>
             <tbody>
               {features.map((f, i) => (
                 <tr key={f.name} className={`border-t border-white/[0.04] ${i % 2 === 0 ? 'bg-white/[0.01]' : ''}`}>
                   <td className="py-3 px-6 text-slate-300">{f.name}</td>
-                  <td className="py-3 px-4 text-center"><CellIcon value={f.cloudDabba} /></td>
-                  <td className="py-3 px-4 text-center"><CellIcon value={f.vercel} /></td>
-                  <td className="py-3 px-4 text-center"><CellIcon value={f.render} /></td>
+                  <td className="py-3 px-4"><div className="flex justify-center"><CellIcon value={f.cloudDabba} /></div></td>
+                  <td className="py-3 px-4"><div className="flex justify-center"><CellIcon value={f.vercel} /></div></td>
+                  <td className="py-3 px-4"><div className="flex justify-center"><CellIcon value={f.render} /></div></td>
                 </tr>
               ))}
             </tbody>
