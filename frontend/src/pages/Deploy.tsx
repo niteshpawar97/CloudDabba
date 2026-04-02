@@ -43,8 +43,10 @@ export function Deploy() {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [projectName, setProjectName] = useState('');
   const [projectType, setProjectType] = useState<ProjectType>('NODE_BACKEND');
-  const [detectedType, setDetectedType] = useState<{ type: string; confidence: string; reason: string } | null>(null);
+  const [detectedType, setDetectedType] = useState<{ type: string; confidence: string; reason: string; structure?: any } | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [backendPath, setBackendPath] = useState('backend');
+  const [frontendPath, setFrontendPath] = useState('frontend');
   const [subdomain, setSubdomain] = useState('');
   const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
   const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
@@ -105,6 +107,10 @@ export function Deploy() {
       if (scan) {
         setDetectedType(scan);
         setProjectType(scan.type as ProjectType);
+        if (scan.structure) {
+          setBackendPath(scan.structure.backendPath || 'backend');
+          setFrontendPath(scan.structure.frontendPath || 'frontend');
+        }
       }
     } catch {}
     setScanning(false);
@@ -146,6 +152,12 @@ export function Deploy() {
       envVars.forEach(({ key, value }) => {
         if (key.trim()) envObj[key.trim()] = value;
       });
+
+      // Add fullstack paths to config
+      if (projectType === 'FULLSTACK') {
+        envObj['backendPath'] = backendPath || 'backend';
+        envObj['frontendPath'] = frontendPath || 'frontend';
+      }
 
       const project = await createProject({
         name: projectName,
@@ -278,6 +290,38 @@ export function Deploy() {
               <option value="CUSTOM_DOCKERFILE">Custom Dockerfile</option>
             </select>
           </div>
+
+          {/* Fullstack Config */}
+          {projectType === 'FULLSTACK' && (
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 space-y-3">
+              <div className="text-sm font-medium text-slate-300">Fullstack Configuration</div>
+              {detectedType?.structure && (
+                <div className="text-xs text-slate-500 bg-slate-800 rounded px-3 py-2">
+                  Detected: {detectedType.structure.pattern === 'separate-dirs' ? 'Separate directories' :
+                    detectedType.structure.pattern === 'root-backend' ? 'Root = backend' : 'Unknown'}
+                  {detectedType.structure.backendFramework && ` | Backend: ${detectedType.structure.backendFramework}`}
+                  {detectedType.structure.frontendFramework && ` | Frontend: ${detectedType.structure.frontendFramework}`}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Backend Path"
+                  value={backendPath}
+                  onChange={(e) => setBackendPath(e.target.value)}
+                  placeholder="backend"
+                />
+                <Input
+                  label="Frontend Path"
+                  value={frontendPath}
+                  onChange={(e) => setFrontendPath(e.target.value)}
+                  placeholder="frontend"
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Paths relative to repo root. Use "." if backend is in root.
+              </p>
+            </div>
+          )}
 
           {/* Environment Variables Section */}
           <div>

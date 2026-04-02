@@ -9,17 +9,22 @@ export class DockerService {
   static async buildImage(
     contextPath: string,
     tag: string,
-    deploymentId: string
+    deploymentId: string,
+    buildArgs?: Record<string, string>
   ): Promise<string> {
     const tarStream = tar.pack(contextPath);
 
-    const stream = await docker.buildImage(tarStream, { t: tag });
+    const buildOpts: any = { t: tag };
+    if (buildArgs) {
+      buildOpts.buildargs = buildArgs;
+    }
+    const stream = await docker.buildImage(tarStream as any, buildOpts);
 
     return new Promise((resolve, reject) => {
       let buildError: string | null = null;
 
       docker.modem.followProgress(
-        stream,
+        stream as any,
         (err: any, output: any[]) => {
           if (err) {
             LogService.createLog(deploymentId, 'BUILD', `Build error: ${err.message}`);
@@ -137,6 +142,9 @@ export class DockerService {
         break;
       case 'STATIC_SITE':
         templateName = 'static.Dockerfile';
+        break;
+      case 'FULLSTACK':
+        templateName = 'fullstack.Dockerfile';
         break;
       case 'NODE_BACKEND':
       default:

@@ -67,11 +67,20 @@ export class DeploymentService {
       const buildType = project.projectType || detectedType;
       await DockerService.copyDockerfile(buildDir, buildType);
 
+      // Prepare build args for fullstack projects
+      const buildArgs: Record<string, string> = {};
+      const projectConfig = project.envVars as any;
+      if (buildType === 'FULLSTACK') {
+        buildArgs.BACKEND_PATH = projectConfig?.backendPath || 'backend';
+        buildArgs.FRONTEND_PATH = projectConfig?.frontendPath || 'frontend';
+        await LogService.createLog(deploymentId, 'BUILD', `Fullstack: backend=/${buildArgs.BACKEND_PATH}, frontend=/${buildArgs.FRONTEND_PATH}`);
+      }
+
       // Step 3: Build Docker image
       imageTag = `clouddabba/${project.subdomain}:${deploymentId.slice(0, 8)}`;
       await LogService.createLog(deploymentId, 'BUILD', `Building Docker image: ${imageTag}`);
 
-      const imageId = await DockerService.buildImage(buildDir, imageTag, deploymentId);
+      const imageId = await DockerService.buildImage(buildDir, imageTag, deploymentId, Object.keys(buildArgs).length > 0 ? buildArgs : undefined);
       await prisma.deployment.update({
         where: { id: deploymentId },
         data: { dockerImageId: imageId },
