@@ -1,0 +1,2 @@
+backend/src/infrastructure/docker/templates/fullstack-start.sh text eol=lf
+backend/src/infrastructure/docker/templates/fullstack-nginx.conf text eol=lf

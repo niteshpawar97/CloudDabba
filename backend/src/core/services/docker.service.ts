@@ -189,12 +189,20 @@ export class DockerService {
     }
 
     // Use src path (works in both dev and prod)
-    const srcTemplates = path.join(__dirname, '../../infrastructure/docker/templates', templateName);
-    const rootTemplates = path.resolve(process.cwd(), 'src/infrastructure/docker/templates', templateName);
-    const templatePath = await fs.access(srcTemplates).then(() => srcTemplates).catch(() => rootTemplates);
+    const srcTemplates = path.join(__dirname, '../../infrastructure/docker/templates');
+    const rootTemplates = path.resolve(process.cwd(), 'src/infrastructure/docker/templates');
+    const templatesDir = await fs.access(srcTemplates).then(() => srcTemplates).catch(() => rootTemplates);
+
     const destPath = path.join(repoPath, 'Dockerfile');
-    await fs.copyFile(templatePath, destPath);
+    await fs.copyFile(path.join(templatesDir, templateName), destPath);
     logger.info(`Copied ${templateName} to ${repoPath}`);
+
+    // Copy supporting files for fullstack (nginx config + start script)
+    if (projectType === 'FULLSTACK') {
+      await fs.copyFile(path.join(templatesDir, 'fullstack-nginx.conf'), path.join(repoPath, 'fullstack-nginx.conf'));
+      await fs.copyFile(path.join(templatesDir, 'fullstack-start.sh'), path.join(repoPath, 'fullstack-start.sh'));
+      logger.info('Copied fullstack support files (nginx.conf, start.sh)');
+    }
   }
 
   static async getContainerLogs(containerId: string, tail = 200): Promise<string> {
