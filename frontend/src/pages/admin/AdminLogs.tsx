@@ -4,8 +4,10 @@ import { getDeploymentLogs } from '../../api/deployments';
 import { LogTerminal } from '../../components/LogTerminal';
 import { DeploymentStatusBadge } from '../../components/DeploymentStatusBadge';
 import { LogLine } from '../../types/log';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminLogs() {
+  usePageTitle('Admin - Logs');
   const [deployments, setDeployments] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);

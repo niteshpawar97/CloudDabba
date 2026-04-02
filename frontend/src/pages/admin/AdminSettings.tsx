@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSettings } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
 import { Settings, Globe, Server, Shield, Terminal } from 'lucide-react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 function SettingRow({ icon: Icon, label, value, color = 'text-slate-300' }: { icon: any; label: string; value: string; color?: string }) {
   return (
@@ -16,6 +17,7 @@ function SettingRow({ icon: Icon, label, value, color = 'text-slate-300' }: { ic
 }
 
 export function AdminSettings() {
+  usePageTitle('Admin - Settings');
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 

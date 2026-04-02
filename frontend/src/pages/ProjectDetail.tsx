@@ -10,8 +10,10 @@ import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
 import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 export function ProjectDetail() {
+  usePageTitle('Project Details');
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);

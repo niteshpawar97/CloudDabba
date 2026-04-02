@@ -8,8 +8,10 @@ import { RepoSelector } from '../components/RepoSelector';
 import { Repository } from '../types/github';
 import { useNavigate } from 'react-router-dom';
 import { GitFork, CheckCircle, Key } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 export function GitHubIntegration() {
+  usePageTitle('GitHub Integration');
   const { user } = useAuth();
   const navigate = useNavigate();
   const [pat, setPat] = useState('');

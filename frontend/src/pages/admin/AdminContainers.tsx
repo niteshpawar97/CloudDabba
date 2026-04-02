@@ -4,8 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Spinner } from '../../components/ui/Spinner';
 import { Container, Square, RefreshCw } from 'lucide-react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminContainers() {
+  usePageTitle('Admin - Containers');
   const [containers, setContainers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

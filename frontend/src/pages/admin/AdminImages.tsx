@@ -3,8 +3,10 @@ import { getImages, deleteImage, cleanupImages } from '../../api/admin';
 import { Button } from '../../components/ui/Button';
 import { Spinner } from '../../components/ui/Spinner';
 import { Image, Trash2, RefreshCw, Sparkles } from 'lucide-react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminImages() {
+  usePageTitle('Admin - Images');
   const [images, setImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cleaning, setCleaning] = useState(false);

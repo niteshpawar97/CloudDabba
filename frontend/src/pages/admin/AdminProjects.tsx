@@ -3,8 +3,10 @@ import { getAllProjects, getAllDeployments } from '../../api/admin';
 import { DeploymentStatusBadge } from '../../components/DeploymentStatusBadge';
 import { Badge } from '../../components/ui/Badge';
 import { Globe, GitBranch } from 'lucide-react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminProjects() {
+  usePageTitle('Admin - Projects');
   const [tab, setTab] = useState<'projects' | 'deployments'>('projects');
   const [projects, setProjects] = useState<any>({ projects: [], pagination: {} });
   const [deployments, setDeployments] = useState<any>({ deployments: [], pagination: {} });

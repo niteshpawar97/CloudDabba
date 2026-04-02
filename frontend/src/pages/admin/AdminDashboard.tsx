@@ -4,6 +4,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { DeploymentStatusBadge } from '../../components/DeploymentStatusBadge';
 import { Users, FolderOpen, Rocket, CheckCircle, XCircle, Container, Image } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
   return (
@@ -18,6 +19,7 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 export function AdminDashboard() {
+  usePageTitle('Admin Dashboard');
   const [stats, setStats] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [activity, setActivity] = useState<any[]>([]);

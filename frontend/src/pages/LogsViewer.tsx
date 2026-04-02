@@ -9,6 +9,7 @@ import { LogTerminal } from '../components/LogTerminal';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Spinner } from '../components/ui/Spinner';
 import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 interface DeploymentWithProject extends Deployment {
   project?: {
@@ -128,6 +129,7 @@ function DeploymentReport({ deployment, baseDomain }: { deployment: DeploymentWi
 }
 
 export function LogsViewer() {
+  usePageTitle('Deployment Logs');
   const { deploymentId } = useParams<{ deploymentId: string }>();
   const [deployment, setDeployment] = useState<DeploymentWithProject | null>(null);
   const [loading, setLoading] = useState(true);

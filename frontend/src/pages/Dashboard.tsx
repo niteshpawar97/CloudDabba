@@ -7,8 +7,10 @@ import { ProjectCard } from '../components/ProjectCard';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { Rocket, FolderOpen, CheckCircle, XCircle } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 export function Dashboard() {
+  usePageTitle('Dashboard');
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [baseDomain, setBaseDomain] = useState('clouddabba.dev');

@@ -1,10 +1,12 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 
 export function Signup() {
+  usePageTitle('Create Account');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

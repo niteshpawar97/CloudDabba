@@ -12,6 +12,7 @@ import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
 import { getConfig, checkSubdomain } from '../api/config';
 import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 function parseEnvString(text: string): { key: string; value: string }[] {
   return text
@@ -33,6 +34,7 @@ function parseEnvString(text: string): { key: string; value: string }[] {
 }
 
 export function Deploy() {
+  usePageTitle('Deploy a Project');
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();

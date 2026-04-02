@@ -1,3 +1,4 @@
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { Hero } from './Hero';
 import { Features } from './Features';
 import { HowItWorks } from './HowItWorks';
@@ -9,6 +10,7 @@ import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 
 export function LandingPage() {
+  usePageTitle();
   return (
     <div className="min-h-screen bg-[#06080f] text-white overflow-hidden">
       {/* Background effects */}

@@ -3,8 +3,10 @@ import { getUsers, updateUserRole, deleteUser } from '../../api/admin';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Search, Trash2, Shield, User } from 'lucide-react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminUsers() {
+  usePageTitle('Admin - Users');
   const [data, setData] = useState<any>({ users: [], pagination: {} });
   const [, setLoading] = useState(true);
   const [search, setSearch] = useState('');
