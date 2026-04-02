@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject } from '../api/projects';
-import { triggerDeploy } from '../api/deployments';
+import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw } from 'lucide-react';
 
 export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -147,16 +147,40 @@ export function ProjectDetail() {
         {project.deployments?.map((dep) => (
           <Card
             key={dep.id}
-            onClick={() => navigate(`/logs/${dep.id}`)}
             className="flex items-center justify-between py-3 px-4"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(`/logs/${dep.id}`)}>
               <DeploymentStatusBadge status={dep.status} />
               <span className="text-sm text-slate-400 font-mono">{dep.commitHash?.slice(0, 7) || '—'}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Clock className="h-4 w-4" />
-              {new Date(dep.startedAt).toLocaleString()}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {new Date(dep.startedAt).toLocaleString()}
+              </span>
+              {/* Container controls */}
+              {dep.containerId && (
+                <div className="flex items-center gap-1">
+                  {dep.status === 'LIVE' && (
+                    <>
+                      <button onClick={() => restartDeployment(dep.id).then(() => getProject(projectId!).then(setProject))}
+                        className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-blue-400" title="Restart">
+                        <RotateCw className="h-3.5 w-3.5" />
+                      </button>
+                      <button onClick={() => { if(confirm('Stop this deployment?')) stopDeployment(dep.id).then(() => getProject(projectId!).then(setProject)); }}
+                        className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-red-400" title="Stop">
+                        <Square className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                  {dep.status === 'STOPPED' && (
+                    <button onClick={() => startDeployment(dep.id).then(() => getProject(projectId!).then(setProject))}
+                      className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-green-400" title="Start">
+                      <Play className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
         ))}

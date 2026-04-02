@@ -6,6 +6,8 @@ const router = Router();
 
 router.get('/:id', authenticate, DeploymentController.getDeployment);
 router.post('/:id/stop', authenticate, DeploymentController.stopDeployment);
+router.post('/:id/start', authenticate, DeploymentController.startDeployment);
+router.post('/:id/restart', authenticate, DeploymentController.restartDeployment);
 router.get('/:id/logs', authenticate, DeploymentController.getLogs);
 
 export default router;

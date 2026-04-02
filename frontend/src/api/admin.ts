@@ -29,3 +29,12 @@ export const stopContainer = (id: string) =>
 
 export const getSettings = () =>
   client.get<{ data: any }>('/admin/settings').then((r) => r.data.data);
+
+export const getImages = () =>
+  client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
+
+export const deleteImage = (id: string) =>
+  client.delete(`/admin/images/${id}`);
+
+export const cleanupImages = () =>
+  client.post<{ data: any }>('/admin/images/cleanup').then((r) => r.data.data);

@@ -21,9 +21,14 @@ router.delete('/users/:id', AdminController.deleteUser);
 router.get('/projects', AdminController.listAllProjects);
 router.get('/deployments', AdminController.listAllDeployments);
 
-// Docker
+// Docker Containers
 router.get('/containers', AdminController.listContainers);
 router.post('/containers/:id/stop', AdminController.stopContainer);
+
+// Docker Images
+router.get('/images', AdminController.listImages);
+router.delete('/images/:id', AdminController.deleteImage);
+router.post('/images/cleanup', AdminController.cleanupImages);
 
 // Settings
 router.get('/settings', AdminController.getSettings);

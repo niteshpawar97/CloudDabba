@@ -20,6 +20,7 @@ import { AdminProjects } from './pages/admin/AdminProjects';
 import { AdminContainers } from './pages/admin/AdminContainers';
 import { AdminLogs } from './pages/admin/AdminLogs';
 import { AdminSettings } from './pages/admin/AdminSettings';
+import { AdminImages } from './pages/admin/AdminImages';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/projects" element={<AdminProjects />} />
             <Route path="/admin/containers" element={<AdminContainers />} />
+            <Route path="/admin/images" element={<AdminImages />} />
             <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
           </Route>

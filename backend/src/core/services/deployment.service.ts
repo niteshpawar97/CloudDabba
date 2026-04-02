@@ -221,15 +221,42 @@ export class DeploymentService {
     const deployment = await this.getDeployment(deploymentId, userId);
 
     if (deployment.containerId) {
-      await DockerService.stopContainer(deployment.containerId);
+      await DockerService.stopOnly(deployment.containerId);
     }
 
     await prisma.deployment.update({
       where: { id: deploymentId },
-      data: { status: 'STOPPED', finishedAt: new Date() },
+      data: { status: 'STOPPED' as any },
     });
 
     await LogService.createLog(deploymentId, 'SYSTEM', 'Deployment stopped by user');
     broadcastStatus(deploymentId, 'STOPPED');
+  }
+
+  static async startDeployment(deploymentId: string, userId: string) {
+    const deployment = await this.getDeployment(deploymentId, userId);
+
+    if (deployment.containerId) {
+      await DockerService.startContainer(deployment.containerId);
+    }
+
+    await prisma.deployment.update({
+      where: { id: deploymentId },
+      data: { status: 'LIVE' as any },
+    });
+
+    await LogService.createLog(deploymentId, 'SYSTEM', 'Deployment started by user');
+    broadcastStatus(deploymentId, 'LIVE');
+  }
+
+  static async restartDeployment(deploymentId: string, userId: string) {
+    const deployment = await this.getDeployment(deploymentId, userId);
+
+    if (deployment.containerId) {
+      await DockerService.restartContainer(deployment.containerId);
+    }
+
+    await LogService.createLog(deploymentId, 'SYSTEM', 'Deployment restarted by user');
+    broadcastStatus(deploymentId, 'LIVE');
   }
 }

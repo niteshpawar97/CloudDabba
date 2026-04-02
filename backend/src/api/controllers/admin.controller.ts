@@ -273,4 +273,55 @@ export class AdminController {
       next(error);
     }
   }
+
+  // Docker images list
+  static async listImages(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const images = await docker.listImages();
+      const clouddabbaImages = images
+        .filter((img: any) => img.RepoTags?.some((t: string) => t.startsWith('clouddabba/')))
+        .map((img: any) => ({
+          id: img.Id.replace('sha256:', '').slice(0, 12),
+          tags: img.RepoTags,
+          size: Math.round(img.Size / 1024 / 1024),
+          created: new Date(img.Created * 1000).toISOString(),
+        }));
+      sendSuccess(res, clouddabbaImages);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Delete Docker image
+  static async deleteImage(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DockerService.removeImage(req.params.id as string);
+      sendSuccess(res, null, 'Image removed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Cleanup all unused images
+  static async cleanupImages(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const images = await docker.listImages();
+      const containers = await docker.listContainers({ all: true });
+      const usedImages = new Set(containers.map((c: any) => c.ImageID));
+
+      let cleaned = 0;
+      for (const img of images) {
+        if (img.RepoTags?.some((t: string) => t.startsWith('clouddabba/')) && !usedImages.has(img.Id)) {
+          try {
+            await docker.getImage(img.Id).remove({ force: true });
+            cleaned++;
+          } catch {}
+        }
+      }
+
+      sendSuccess(res, { cleaned }, `${cleaned} unused images removed`);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -100,6 +100,42 @@ export class DockerService {
     return container;
   }
 
+  static async stopOnly(containerId: string) {
+    try {
+      const container = docker.getContainer(containerId);
+      await container.stop({ t: 10 });
+      logger.info(`Container ${containerId} stopped`);
+    } catch (error: any) {
+      if (error.statusCode !== 304 && error.statusCode !== 404) {
+        logger.error(`Failed to stop container ${containerId}:`, error);
+      }
+    }
+  }
+
+  static async startContainer(containerId: string) {
+    try {
+      const container = docker.getContainer(containerId);
+      await container.start();
+      logger.info(`Container ${containerId} started`);
+    } catch (error: any) {
+      if (error.statusCode !== 304) {
+        logger.error(`Failed to start container ${containerId}:`, error);
+        throw error;
+      }
+    }
+  }
+
+  static async restartContainer(containerId: string) {
+    try {
+      const container = docker.getContainer(containerId);
+      await container.restart({ t: 10 });
+      logger.info(`Container ${containerId} restarted`);
+    } catch (error: any) {
+      logger.error(`Failed to restart container ${containerId}:`, error);
+      throw error;
+    }
+  }
+
   static async stopContainer(containerId: string) {
     try {
       const container = docker.getContainer(containerId);

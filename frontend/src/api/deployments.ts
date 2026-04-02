@@ -13,5 +13,11 @@ export const getDeployment = (id: string) =>
 export const stopDeployment = (id: string) =>
   client.post(`/deployments/${id}/stop`);
 
+export const startDeployment = (id: string) =>
+  client.post(`/deployments/${id}/start`);
+
+export const restartDeployment = (id: string) =>
+  client.post(`/deployments/${id}/restart`);
+
 export const getDeploymentLogs = (id: string, page = 1) =>
   client.get<{ data: { logs: any[]; pagination: any } }>(`/deployments/${id}/logs?page=${page}`).then((r) => r.data.data);

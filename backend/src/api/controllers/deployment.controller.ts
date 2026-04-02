@@ -41,6 +41,24 @@ export class DeploymentController {
     }
   }
 
+  static async startDeployment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DeploymentService.startDeployment(req.params.id as string, req.user!.id);
+      sendSuccess(res, null, 'Deployment started');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async restartDeployment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DeploymentService.restartDeployment(req.params.id as string, req.user!.id);
+      sendSuccess(res, null, 'Deployment restarted');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getLogs(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
