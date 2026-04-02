@@ -96,12 +96,14 @@ export class DeploymentService {
       await this.updateStatus(deploymentId, 'DEPLOYING');
       const hostPort = await allocatePort();
       const isStatic = ['STATIC_SITE', 'REACT_FRONTEND'].includes(buildType);
-      const containerPort = isStatic ? 80 : hostPort; // Static = nginx 80, others = our allocated port
+      const isFullstack = buildType === 'FULLSTACK';
+      // Static/Fullstack = nginx on port 80, others = our allocated port
+      const containerPort = (isStatic || isFullstack) ? 80 : hostPort;
       const containerName = `cd-${project.subdomain}-${deploymentId.slice(0, 8)}`;
 
-      // Parse env vars — force PORT so app listens on our port
+      // Parse env vars — force PORT so app listens on our port (skip for static/fullstack which use nginx)
       const envVars: Record<string, string> = project.envVars ? { ...(project.envVars as Record<string, string>) } : {};
-      if (!isStatic) {
+      if (!isStatic && !isFullstack) {
         envVars['PORT'] = String(hostPort);
         delete envVars['port'];
       }
