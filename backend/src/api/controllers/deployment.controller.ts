@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { DeploymentService } from '../../core/services/deployment.service';
 import { LogService } from '../../core/services/log.service';
+import { DockerService } from '../../core/services/docker.service';
 import { AuthRequest } from '../../core/types';
 import { sendSuccess, sendCreated } from '../../shared/utils/api-response';
 
@@ -66,6 +67,20 @@ export class DeploymentController {
       const limit = parseInt(req.query.limit as string) || 100;
       const result = await LogService.getLogs(req.params.id as string, page, limit);
       sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getContainerLogs(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
+      if (!deployment.containerId) {
+        return sendSuccess(res, { logs: '' }, 'No container found');
+      }
+      const tail = parseInt(req.query.tail as string) || 200;
+      const logs = await DockerService.getContainerLogs(deployment.containerId, tail);
+      sendSuccess(res, { logs });
     } catch (error) {
       next(error);
     }

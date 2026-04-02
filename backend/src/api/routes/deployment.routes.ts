@@ -9,5 +9,6 @@ router.post('/:id/stop', authenticate, DeploymentController.stopDeployment);
 router.post('/:id/start', authenticate, DeploymentController.startDeployment);
 router.post('/:id/restart', authenticate, DeploymentController.restartDeployment);
 router.get('/:id/logs', authenticate, DeploymentController.getLogs);
+router.get('/:id/container-logs', authenticate, DeploymentController.getContainerLogs);
 
 export default router;

@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 export function ProjectDetail() {
@@ -160,23 +160,33 @@ export function ProjectDetail() {
                 <Clock className="h-3 w-3" />
                 {new Date(dep.startedAt).toLocaleString()}
               </span>
+              {/* Runtime logs button */}
+              {dep.status === 'LIVE' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate(`/logs/${dep.id}`); }}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 text-xs font-medium transition-colors"
+                  title="View Runtime Logs"
+                >
+                  <Terminal className="h-3 w-3" /> Logs
+                </button>
+              )}
               {/* Container controls */}
               {dep.containerId && (
                 <div className="flex items-center gap-1">
                   {dep.status === 'LIVE' && (
                     <>
-                      <button onClick={() => restartDeployment(dep.id).then(() => getProject(projectId!).then(setProject))}
+                      <button onClick={(e) => { e.stopPropagation(); restartDeployment(dep.id).then(() => getProject(projectId!).then(setProject)); }}
                         className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-blue-400" title="Restart">
                         <RotateCw className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => { if(confirm('Stop this deployment?')) stopDeployment(dep.id).then(() => getProject(projectId!).then(setProject)); }}
+                      <button onClick={(e) => { e.stopPropagation(); if(confirm('Stop this deployment?')) stopDeployment(dep.id).then(() => getProject(projectId!).then(setProject)); }}
                         className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-red-400" title="Stop">
                         <Square className="h-3.5 w-3.5" />
                       </button>
                     </>
                   )}
                   {dep.status === 'STOPPED' && (
-                    <button onClick={() => startDeployment(dep.id).then(() => getProject(projectId!).then(setProject))}
+                    <button onClick={(e) => { e.stopPropagation(); startDeployment(dep.id).then(() => getProject(projectId!).then(setProject)); }}
                       className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-green-400" title="Start">
                       <Play className="h-3.5 w-3.5" />
                     </button>

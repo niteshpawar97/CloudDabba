@@ -21,3 +21,6 @@ export const restartDeployment = (id: string) =>
 
 export const getDeploymentLogs = (id: string, page = 1) =>
   client.get<{ data: { logs: any[]; pagination: any } }>(`/deployments/${id}/logs?page=${page}`).then((r) => r.data.data);
+
+export const getContainerLogs = (id: string, tail = 200) =>
+  client.get<{ data: { logs: string } }>(`/deployments/${id}/container-logs?tail=${tail}`).then((r) => r.data.data);

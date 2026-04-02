@@ -197,6 +197,65 @@ export class DockerService {
     logger.info(`Copied ${templateName} to ${repoPath}`);
   }
 
+  static async getContainerLogs(containerId: string, tail = 200): Promise<string> {
+    try {
+      const container = docker.getContainer(containerId);
+      const logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        tail,
+        timestamps: true,
+      });
+      return logs.toString('utf8');
+    } catch (error: any) {
+      logger.error(`Failed to get container logs for ${containerId}:`, error);
+      throw error;
+    }
+  }
+
+  static async streamContainerLogs(
+    containerId: string,
+    onLog: (line: string) => void,
+    onError: (err: Error) => void
+  ): Promise<() => void> {
+    const container = docker.getContainer(containerId);
+    const stream = await container.logs({
+      stdout: true,
+      stderr: true,
+      follow: true,
+      tail: 100,
+      timestamps: true,
+    });
+
+    let destroyed = false;
+
+    const readable = stream as NodeJS.ReadableStream;
+    readable.on('data', (chunk: Buffer) => {
+      if (destroyed) return;
+      const lines = chunk.toString('utf8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        // Docker multiplexed stream: first 8 bytes are header, skip them
+        const cleaned = line.length > 8 ? line.slice(8).trim() || line.trim() : line.trim();
+        if (cleaned) onLog(cleaned);
+      }
+    });
+
+    readable.on('error', (err: Error) => {
+      if (!destroyed) onError(err);
+    });
+
+    readable.on('end', () => {
+      destroyed = true;
+    });
+
+    return () => {
+      destroyed = true;
+      try {
+        (readable as any).destroy?.();
+      } catch {}
+    };
+  }
+
   static getContainerPort(projectType: string): number {
     switch (projectType) {
       case 'REACT_FRONTEND':

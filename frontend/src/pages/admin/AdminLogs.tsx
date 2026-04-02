@@ -55,7 +55,7 @@ export function AdminLogs() {
         {/* Log viewer */}
         <div className="flex-1 min-h-0">
           {selectedId ? (
-            <LogTerminal lines={logs} className="h-full" />
+            <LogTerminal lines={logs} className="h-full" title={deployments.find((d: any) => d.id === selectedId)?.project?.name || 'Logs'} />
           ) : (
             <div className="h-full flex items-center justify-center text-slate-500">Select a deployment to view logs</div>
           )}
