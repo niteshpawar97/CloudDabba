@@ -13,7 +13,7 @@ export async function subdomainProxy(req: Request, res: Response, next: NextFunc
     return next(); // Not a subdomain request, continue to panel
   }
 
-  // Extract subdomain: "myapp.cloud.niketgroup.com" → "myapp"
+  // Extract subdomain: "myapp.clouddabba.dev" → "myapp"
   const subdomain = host.replace(`.${baseDomain}`, '');
   if (!subdomain || subdomain === host) {
     return next();

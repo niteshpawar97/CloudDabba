@@ -31,7 +31,7 @@ if (config.app.nodeEnv !== 'test') {
   app.use(morgan('dev'));
 }
 
-// Subdomain proxy — route *.cloud.niketgroup.com to containers
+// Subdomain proxy — route *.clouddabba.dev to containers
 app.use(subdomainProxy);
 
 // Rate limiting

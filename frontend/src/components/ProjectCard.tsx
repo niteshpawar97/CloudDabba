@@ -26,7 +26,7 @@ export function ProjectCard({ project }: { project: Project }) {
         ) : (
           <div className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
-            <span className="text-blue-400">{project.subdomain}.cloud.niketgroup.com</span>
+            <span className="text-blue-400">{project.subdomain}.clouddabba.dev</span>
           </div>
         )}
         <div className="flex items-center gap-2">

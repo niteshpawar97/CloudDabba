@@ -26,7 +26,7 @@ function DeploymentReport({ deployment }: { deployment: DeploymentWithProject })
   const project = deployment.project;
   if (!project) return null;
 
-  const subdomain = `${project.subdomain}.cloud.niketgroup.com`;
+  const subdomain = `${project.subdomain}.clouddabba.dev`;
   const subdomainUrl = `https://${subdomain}`;
   const directUrl = deployment.containerPort ? `http://129.159.16.65:${deployment.containerPort}` : null;
   const isLive = deployment.status === 'LIVE';

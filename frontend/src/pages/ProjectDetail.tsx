@@ -61,7 +61,7 @@ export function ProjectDetail() {
             ) : (
               <span className="flex items-center gap-1">
                 <Globe className="h-4 w-4" />
-                <span className="text-slate-500">{project.subdomain}.cloud.niketgroup.com</span>
+                <span className="text-slate-500">{project.subdomain}.clouddabba.dev</span>
               </span>
             )}
             <span className="flex items-center gap-1"><GitBranch className="h-4 w-4" /> {project.branch}</span>
