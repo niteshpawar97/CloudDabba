@@ -95,13 +95,16 @@ export class DeploymentService {
       // Step 4: Run container
       await this.updateStatus(deploymentId, 'DEPLOYING');
       const hostPort = await allocatePort();
-      const containerPort = DockerService.getContainerPort(buildType);
+      const isStatic = ['STATIC_SITE', 'REACT_FRONTEND'].includes(buildType);
+      const containerPort = isStatic ? 80 : hostPort; // Static = nginx 80, others = our allocated port
       const containerName = `cd-${project.subdomain}-${deploymentId.slice(0, 8)}`;
 
-      // Parse env vars — force PORT to match our container port
+      // Parse env vars — force PORT so app listens on our port
       const envVars: Record<string, string> = project.envVars ? { ...(project.envVars as Record<string, string>) } : {};
-      envVars['PORT'] = String(containerPort);
-      delete envVars['port'];
+      if (!isStatic) {
+        envVars['PORT'] = String(hostPort);
+        delete envVars['port'];
+      }
 
       const container = await DockerService.createAndStartContainer(
         imageTag,
