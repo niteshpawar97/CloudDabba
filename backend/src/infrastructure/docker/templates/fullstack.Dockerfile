@@ -3,7 +3,7 @@ WORKDIR /frontend
 ARG FRONTEND_PATH=frontend
 COPY . /repo
 WORKDIR /repo/${FRONTEND_PATH}
-RUN npm ci && npm run build
+RUN npm install --legacy-peer-deps && npm run build
 # Normalize output
 RUN mkdir -p /frontend-out && \
     if [ -d dist ]; then cp -r dist/. /frontend-out/; \
@@ -19,7 +19,7 @@ COPY . /repo
 WORKDIR /app
 RUN cp -r /repo/${BACKEND_PATH}/. /app/ && \
     rm -rf /repo
-RUN npm ci --only=production
+RUN npm install --legacy-peer-deps --only=production
 # Copy frontend build to public folder
 COPY --from=frontend-build /frontend-out ./public
 RUN chmod -R 755 ./public 2>/dev/null; true
