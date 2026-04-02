@@ -11,6 +11,13 @@ export interface RepoScan {
   type: string;
   confidence: string;
   reason: string;
+  structure?: {
+    pattern: string;
+    backendPath?: string;
+    frontendPath?: string;
+    backendFramework?: string;
+    frontendFramework?: string;
+  };
 }
 
 export const scanRepo = (owner: string, repo: string) =>

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, X, Minus } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
 const features = [
   { name: 'Self-hosted', cloudDabba: true, vercel: false, render: false },
