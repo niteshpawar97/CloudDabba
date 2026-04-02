@@ -28,10 +28,12 @@ const steps = [
   {
     step: '02',
     icon: Scan,
-    title: 'Smart Auto-Detection',
-    description: 'CloudDabba scans your code, detects frameworks (React, Express, NestJS...), identifies TypeScript, and reorganizes any folder structure into a standard layout.',
+    title: 'Deploy or Push',
+    description: 'Click Deploy or set up a GitHub webhook for auto-deploy on every push. CloudDabba scans your code, detects frameworks, identifies TypeScript, and reorganizes any folder structure.',
     visual: (
       <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-4 font-mono text-xs space-y-1">
+        <div className="text-slate-500">$ git push origin main</div>
+        <div className="text-cyan-400">Webhook received → auto-deploying...</div>
         <div className="text-slate-500">Scanning repository...</div>
         <div className="text-amber-400">Detected: FULLSTACK [TypeScript]</div>
         <div className="text-slate-500">  backend: Express (./server)</div>

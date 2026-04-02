@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getProject, deleteProject } from '../api/projects';
+import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook } from '../api/projects';
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { Project } from '../types/project';
@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 export function ProjectDetail() {
@@ -28,6 +28,12 @@ export function ProjectDetail() {
   const [subdomainSaving, setSubdomainSaving] = useState(false);
   const [subdomainError, setSubdomainError] = useState('');
 
+  // Webhook / auto-deploy
+  const [webhookStatus, setWebhookStatus] = useState<{ autoDeploy: boolean; webhookUrl: string | null; hasSecret: boolean } | null>(null);
+  const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [webhookLoading, setWebhookLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
   useEffect(() => {
     getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
   }, []);
@@ -38,10 +44,10 @@ export function ProjectDetail() {
         .then(setProject)
         .catch(() => navigate('/'))
         .finally(() => setLoading(false));
+      getWebhookStatus(projectId).then(setWebhookStatus).catch(() => {});
     }
   }, [projectId]);
 
-  // Check subdomain availability with debounce
   useEffect(() => {
     if (!newSubdomain || newSubdomain.length < 3) {
       setSubdomainAvailable(null);
@@ -86,6 +92,34 @@ export function ProjectDetail() {
     } finally {
       setSubdomainSaving(false);
     }
+  };
+
+  const handleEnableWebhook = async () => {
+    if (!projectId) return;
+    setWebhookLoading(true);
+    try {
+      const result = await enableWebhook(projectId);
+      setWebhookStatus({ autoDeploy: true, webhookUrl: result.webhookUrl, hasSecret: true });
+      setWebhookSecret(result.secret);
+    } catch {}
+    setWebhookLoading(false);
+  };
+
+  const handleDisableWebhook = async () => {
+    if (!projectId) return;
+    setWebhookLoading(true);
+    try {
+      await disableWebhook(projectId);
+      setWebhookStatus({ autoDeploy: false, webhookUrl: null, hasSecret: false });
+      setWebhookSecret(null);
+    } catch {}
+    setWebhookLoading(false);
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   if (loading) return <Spinner size="lg" />;
@@ -141,6 +175,84 @@ export function ProjectDetail() {
         </div>
       </div>
 
+      {/* Auto-Deploy / Webhook Section */}
+      <Card className="p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${webhookStatus?.autoDeploy ? 'bg-green-500/10' : 'bg-white/5'}`}>
+              <Webhook className={`h-5 w-5 ${webhookStatus?.autoDeploy ? 'text-green-400' : 'text-slate-500'}`} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Auto-Deploy (Git Push)</h3>
+              <p className="text-xs text-slate-500">
+                {webhookStatus?.autoDeploy
+                  ? 'Deploys automatically when you push to ' + project.branch
+                  : 'Push to GitHub and auto-deploy — set up webhook'}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant={webhookStatus?.autoDeploy ? 'danger' : 'primary'}
+            loading={webhookLoading}
+            onClick={webhookStatus?.autoDeploy ? handleDisableWebhook : handleEnableWebhook}
+          >
+            {webhookStatus?.autoDeploy ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
+
+        {webhookStatus?.autoDeploy && (
+          <div className="space-y-3">
+            {/* Webhook URL */}
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Webhook URL</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 font-mono overflow-x-auto">
+                  {webhookStatus.webhookUrl}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(webhookStatus.webhookUrl!, 'url')}
+                  className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                >
+                  {copied === 'url' ? <CheckCircle className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Secret (only shown once after enable) */}
+            {webhookSecret && (
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">
+                  Secret <span className="text-amber-400">(copy now — won't be shown again)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-300 font-mono overflow-x-auto">
+                    {webhookSecret}
+                  </code>
+                  <button
+                    onClick={() => copyToClipboard(webhookSecret, 'secret')}
+                    className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                  >
+                    {copied === 'secret' ? <CheckCircle className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Setup instructions */}
+            <div className="bg-slate-900/50 rounded-lg p-3 text-xs text-slate-500 space-y-1">
+              <div className="text-slate-400 font-medium mb-2">Setup in GitHub:</div>
+              <div>1. Go to your repo → Settings → Webhooks → Add webhook</div>
+              <div>2. Paste the <span className="text-white">Webhook URL</span> above</div>
+              <div>3. Set Content type to <span className="text-white">application/json</span></div>
+              <div>4. Paste the <span className="text-white">Secret</span> above</div>
+              <div>5. Select <span className="text-white">"Just the push event"</span></div>
+              <div>6. Click <span className="text-white">Add webhook</span> — done!</div>
+            </div>
+          </div>
+        )}
+      </Card>
+
       <h2 className="text-lg font-semibold text-white mb-4">Deployment History</h2>
       <div className="space-y-2">
         {(!project.deployments || project.deployments.length === 0) && (
@@ -160,7 +272,6 @@ export function ProjectDetail() {
                 <Clock className="h-3 w-3" />
                 {new Date(dep.startedAt).toLocaleString()}
               </span>
-              {/* Runtime logs button */}
               {dep.status === 'LIVE' && (
                 <button
                   onClick={(e) => { e.stopPropagation(); navigate(`/logs/${dep.id}`); }}
@@ -170,7 +281,6 @@ export function ProjectDetail() {
                   <Terminal className="h-3 w-3" /> Logs
                 </button>
               )}
-              {/* Container controls */}
               {dep.containerId && (
                 <div className="flex items-center gap-1">
                   {dep.status === 'LIVE' && (

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ProjectController } from '../controllers/project.controller';
 import { DeploymentController } from '../controllers/deployment.controller';
+import { WebhookController } from '../controllers/webhook.controller';
 import { createProjectValidator, updateProjectValidator, envVarsValidator } from '../validators/project.validator';
 import { validate } from '../../core/middleware/validation.middleware';
 import { authenticate } from '../../core/middleware/auth.middleware';
@@ -23,5 +24,10 @@ router.get('/check-subdomain/:subdomain', authenticate, ProjectController.checkS
 // Deploy & Deployments under project
 router.post('/:id/deploy', authenticate, deployLimiter, DeploymentController.triggerDeploy);
 router.get('/:id/deployments', authenticate, DeploymentController.listByProject);
+
+// Webhook (auto-deploy)
+router.get('/:id/webhook', authenticate, WebhookController.getWebhookStatus);
+router.post('/:id/webhook', authenticate, WebhookController.enableWebhook);
+router.delete('/:id/webhook', authenticate, WebhookController.disableWebhook);
 
 export default router;

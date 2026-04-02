@@ -5,6 +5,7 @@ import projectRoutes from './project.routes';
 import deploymentRoutes from './deployment.routes';
 import adminRoutes from './admin.routes';
 import sourceRoutes from './source.routes';
+import webhookRoutes from './webhook.routes';
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.use('/projects', projectRoutes);
 router.use('/deployments', deploymentRoutes);
 router.use('/admin', adminRoutes);
 router.use('/source', sourceRoutes);
+router.use('/webhook', webhookRoutes);
 
 // Health check
 router.get('/health', (_req, res) => {

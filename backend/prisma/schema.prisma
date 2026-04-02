@@ -42,19 +42,21 @@ enum ProjectStatus {
 }
 
 model Project {
-  id          String        @id @default(uuid())
-  userId      String        @map("user_id")
-  name        String        @db.VarChar(100)
-  repoUrl     String        @map("repo_url") @db.VarChar(500)
-  subdomain   String        @unique @db.VarChar(63)
-  projectType ProjectType   @map("project_type")
-  status      ProjectStatus @default(INACTIVE)
-  branch      String        @default("main") @db.VarChar(100)
-  envVars     Json?         @map("env_vars")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deployments Deployment[]
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  name          String        @db.VarChar(100)
+  repoUrl       String        @map("repo_url") @db.VarChar(500)
+  subdomain     String        @unique @db.VarChar(63)
+  projectType   ProjectType   @map("project_type")
+  status        ProjectStatus @default(INACTIVE)
+  branch        String        @default("main") @db.VarChar(100)
+  envVars       Json?         @map("env_vars")
+  autoDeploy    Boolean       @default(false) @map("auto_deploy")
+  webhookSecret String?       @map("webhook_secret") @db.VarChar(64)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deployments   Deployment[]
 
   @@unique([userId, name])
   @@map("projects")
