@@ -118,4 +118,5 @@ STARTSH
 RUN chmod +x /app/_start.sh
 
 EXPOSE 80
-CMD ["/app/_start.sh"]
+ENTRYPOINT []
+CMD ["/bin/sh", "/app/_start.sh"]
