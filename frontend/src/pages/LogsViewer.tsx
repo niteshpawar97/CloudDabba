@@ -93,6 +93,20 @@ function DeploymentReport({ deployment, baseDomain }: { deployment: DeploymentWi
           </a>
         </div>
 
+        {/* SSL Status */}
+        <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
+          <span className="text-sm text-slate-300">SSL</span>
+          {subdomainUrl.startsWith('https') ? (
+            <span className="flex items-center gap-1 text-green-400 text-sm">
+              <CheckCircle className="h-3 w-3" /> Secured (HTTPS)
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-slate-400 text-sm">
+              HTTP only
+            </span>
+          )}
+        </div>
+
         {/* Container Status */}
         <div className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2">
           <span className="text-sm text-slate-300">Container</span>
