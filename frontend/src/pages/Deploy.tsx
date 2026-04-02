@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Repository, Branch } from '../types/github';
 import { ProjectType } from '../types/project';
-import { getBranches } from '../api/github';
+import { getBranches, scanRepo } from '../api/github';
 import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
 import { getConfig, checkSubdomain } from '../api/config';
@@ -43,6 +43,8 @@ export function Deploy() {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [projectName, setProjectName] = useState('');
   const [projectType, setProjectType] = useState<ProjectType>('NODE_BACKEND');
+  const [detectedType, setDetectedType] = useState<{ type: string; confidence: string; reason: string } | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [subdomain, setSubdomain] = useState('');
   const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
   const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
@@ -91,10 +93,21 @@ export function Deploy() {
     setSelectedBranch(repo.defaultBranch);
 
     const [owner, repoName] = repo.fullName.split('/');
+
+    // Scan repo type + fetch branches in parallel
+    setScanning(true);
     try {
-      const b = await getBranches(owner, repoName);
-      setBranches(b);
+      const [branches, scan] = await Promise.all([
+        getBranches(owner, repoName).catch(() => []),
+        scanRepo(owner, repoName).catch(() => null),
+      ]);
+      setBranches(branches);
+      if (scan) {
+        setDetectedType(scan);
+        setProjectType(scan.type as ProjectType);
+      }
     } catch {}
+    setScanning(false);
     setStep(2);
   };
 
@@ -239,16 +252,29 @@ export function Deploy() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Project Type</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-300">Project Type</label>
+              {detectedType && (
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  detectedType.confidence === 'high' ? 'bg-green-900/50 text-green-400' :
+                  detectedType.confidence === 'medium' ? 'bg-amber-900/50 text-amber-400' :
+                  'bg-slate-700 text-slate-400'
+                }`}>
+                  Auto-detected: {detectedType.reason}
+                </span>
+              )}
+              {scanning && <span className="text-xs text-blue-400 animate-pulse">Scanning repo...</span>}
+            </div>
             <select
               value={projectType}
               onChange={(e) => setProjectType(e.target.value as ProjectType)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-200"
             >
-              <option value="NODE_BACKEND">Node.js Backend</option>
-              <option value="REACT_FRONTEND">React Frontend</option>
-              <option value="STATIC_SITE">Static Site</option>
-              <option value="FULLSTACK">Fullstack</option>
+              <option value="NODE_BACKEND">Node.js Backend (Express, Fastify, etc.)</option>
+              <option value="REACT_FRONTEND">React Frontend (Vite, CRA)</option>
+              <option value="NEXTJS_APP">Next.js Application</option>
+              <option value="STATIC_SITE">Static Site (HTML/CSS/JS)</option>
+              <option value="FULLSTACK">Fullstack (backend + frontend)</option>
               <option value="CUSTOM_DOCKERFILE">Custom Dockerfile</option>
             </select>
           </div>

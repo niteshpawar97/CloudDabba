@@ -129,6 +129,9 @@ export class DockerService {
 
     let templateName: string;
     switch (projectType) {
+      case 'NEXTJS_APP':
+        templateName = 'nextjs.Dockerfile';
+        break;
       case 'REACT_FRONTEND':
         templateName = 'react.Dockerfile';
         break;
@@ -155,6 +158,8 @@ export class DockerService {
       case 'REACT_FRONTEND':
       case 'STATIC_SITE':
         return 80;
+      case 'NEXTJS_APP':
+        return 3000;
       default:
         return 3000;
     }

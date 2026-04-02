@@ -59,11 +59,13 @@ export class DeploymentService {
 
       // Step 2: Detect & prepare
       await this.updateStatus(deploymentId, 'BUILDING');
-      const detectedType = await GitHubService.detectProjectType(buildDir);
-      await LogService.createLog(deploymentId, 'SYSTEM', `Detected project type: ${detectedType}`);
+      const detection = await GitHubService.detectProjectType(buildDir);
+      const detectedType = detection.type;
+      await LogService.createLog(deploymentId, 'SYSTEM', `Detected project type: ${detectedType} (${detection.reason})`);
 
-      // Use detected type (more accurate than user-selected)
-      await DockerService.copyDockerfile(buildDir, detectedType);
+      // Use project's stored type if manually set, otherwise use detected
+      const buildType = project.projectType || detectedType;
+      await DockerService.copyDockerfile(buildDir, buildType);
 
       // Step 3: Build Docker image
       imageTag = `clouddabba/${project.subdomain}:${deploymentId.slice(0, 8)}`;
@@ -79,7 +81,7 @@ export class DeploymentService {
       // Step 4: Run container
       await this.updateStatus(deploymentId, 'DEPLOYING');
       const hostPort = await allocatePort();
-      const containerPort = DockerService.getContainerPort(detectedType);
+      const containerPort = DockerService.getContainerPort(buildType);
       const containerName = `cd-${project.subdomain}-${deploymentId.slice(0, 8)}`;
 
       // Parse env vars
