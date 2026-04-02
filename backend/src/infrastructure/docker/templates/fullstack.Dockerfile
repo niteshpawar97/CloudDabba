@@ -80,37 +80,40 @@ RUN cat > /app/_start.sh << 'STARTSH'
 #!/bin/sh
 # Start Node.js backend on internal port
 export PORT=3001
-# Find the entry point
-if [ -f server.js ]; then
-    ENTRY="server.js"
-elif [ -f index.js ]; then
-    ENTRY="index.js"
-elif [ -f app.js ]; then
-    ENTRY="app.js"
-elif [ -f src/server.js ]; then
-    ENTRY="src/server.js"
-elif [ -f src/index.js ]; then
-    ENTRY="src/index.js"
-else
-    ENTRY=$(node -e "try{console.log(require('./package.json').main||'index.js')}catch(e){console.log('index.js')}")
-fi
 
-echo "Starting backend: $ENTRY on port $PORT"
-node "$ENTRY" &
+echo "Starting backend via npm start on port $PORT"
+npm start &
 BACKEND_PID=$!
 
-# Wait for backend to start
-sleep 2
+# Wait for backend to initialize
+sleep 3
 
-# Start nginx (foreground)
+# Start nginx on port 80 (foreground)
 echo "Starting nginx on port 80"
 nginx -g 'daemon off;' &
 NGINX_PID=$!
 
-# If either process exits, stop both
-trap "kill $BACKEND_PID $NGINX_PID 2>/dev/null; exit" SIGTERM SIGINT
-wait -n $BACKEND_PID $NGINX_PID 2>/dev/null || true
-kill $BACKEND_PID $NGINX_PID 2>/dev/null
+# Trap signals for graceful shutdown
+cleanup() {
+    kill $BACKEND_PID $NGINX_PID 2>/dev/null
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
+
+# Monitor both processes — if either dies, restart it
+while true; do
+    if ! kill -0 $BACKEND_PID 2>/dev/null; then
+        echo "Backend crashed, restarting..."
+        npm start &
+        BACKEND_PID=$!
+    fi
+    if ! kill -0 $NGINX_PID 2>/dev/null; then
+        echo "Nginx crashed, restarting..."
+        nginx -g 'daemon off;' &
+        NGINX_PID=$!
+    fi
+    sleep 5
+done
 STARTSH
 RUN chmod +x /app/_start.sh
 
