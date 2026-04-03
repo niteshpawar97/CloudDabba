@@ -1,6 +1,5 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import fs from 'fs/promises';
 import path from 'path';
 import ejs from 'ejs';
 import { config } from '../../shared/config/app.config';
@@ -26,7 +25,6 @@ const SUBDOMAIN_TEMPLATE = `server {
 }
 `;
 
-// HTTP-only config (before SSL is issued)
 const CUSTOM_DOMAIN_HTTP_TEMPLATE = `server {
     listen 80;
     server_name <%= customDomain %><%= hasWww ? ' www.' + customDomain : '' %>;
@@ -44,7 +42,6 @@ const CUSTOM_DOMAIN_HTTP_TEMPLATE = `server {
 }
 `;
 
-// Full SSL config (after certbot issues certificate)
 const CUSTOM_DOMAIN_SSL_TEMPLATE = `server {
     listen 80;
     server_name <%= customDomain %><%= hasWww ? ' www.' + customDomain : '' %>;
@@ -71,6 +68,25 @@ server {
 }
 `;
 
+// Helper: write file via sudo (for /etc/nginx/sites-enabled/)
+async function sudoWriteFile(filePath: string, content: string) {
+  await execFileAsync('sudo', ['bash', '-c', `cat > '${filePath}'`], {
+    timeout: 10000,
+  }).catch(async () => {
+    // Fallback: use sudo tee
+    const { exec } = require('child_process');
+    return new Promise<void>((resolve, reject) => {
+      const proc = exec(`sudo tee '${filePath}' > /dev/null`, (err: any) => err ? reject(err) : resolve());
+      proc.stdin.write(content);
+      proc.stdin.end();
+    });
+  });
+}
+
+async function sudoDeleteFile(filePath: string) {
+  await execFileAsync('sudo', ['rm', '-f', filePath], { timeout: 5000 });
+}
+
 export class NginxService {
   static async generateConfig(subdomain: string, port: number) {
     try {
@@ -81,7 +97,7 @@ export class NginxService {
       });
 
       const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
-      await fs.writeFile(configPath, configContent, 'utf-8');
+      await sudoWriteFile(configPath, configContent);
       logger.info(`NGINX config generated: ${configPath}`);
 
       await this.reload();
@@ -93,16 +109,14 @@ export class NginxService {
 
   static async generateCustomDomainConfig(customDomain: string, port: number) {
     try {
-      // Only add www for root domains (example.com), not subdomains (test.example.com)
       const isRootDomain = customDomain.split('.').length <= 2;
       const hasWww = isRootDomain && !customDomain.startsWith('www.');
 
-      // Start with HTTP-only config so certbot can verify domain
       const configContent = ejs.render(CUSTOM_DOMAIN_HTTP_TEMPLATE, { customDomain, port, hasWww });
 
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
       const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
-      await fs.writeFile(configPath, configContent, 'utf-8');
+      await sudoWriteFile(configPath, configContent);
       logger.info(`Custom domain NGINX config (HTTP): ${configPath}`);
 
       await this.reload();
@@ -111,9 +125,6 @@ export class NginxService {
     }
   }
 
-  /**
-   * Upgrade custom domain config to SSL after certificate is issued.
-   */
   static async upgradeToSsl(customDomain: string, port: number) {
     try {
       const isRootDomain = customDomain.split('.').length <= 2;
@@ -122,7 +133,7 @@ export class NginxService {
 
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
       const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
-      await fs.writeFile(configPath, configContent, 'utf-8');
+      await sudoWriteFile(configPath, configContent);
       logger.info(`Custom domain NGINX config upgraded to SSL: ${configPath}`);
 
       await this.reload();
@@ -135,11 +146,11 @@ export class NginxService {
     try {
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
       const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
-      await fs.unlink(configPath);
+      await sudoDeleteFile(configPath);
       logger.info(`Custom domain NGINX config removed: ${configPath}`);
       await this.reload();
     } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+      if (!error.message?.includes('No such file')) {
         logger.warn(`Custom domain NGINX removal failed: ${error.message}`);
       }
     }
@@ -148,21 +159,16 @@ export class NginxService {
   static async removeConfig(subdomain: string) {
     try {
       const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
-      await fs.unlink(configPath);
+      await sudoDeleteFile(configPath);
       logger.info(`NGINX config removed: ${configPath}`);
       await this.reload();
     } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+      if (!error.message?.includes('No such file')) {
         logger.warn(`NGINX config removal failed (non-fatal): ${error.message}`);
       }
     }
   }
 
-  /**
-   * Auto-issue SSL certificate for custom domain.
-   * Uses certonly (not --nginx) to avoid certbot modifying wrong config files.
-   * Then upgrades NGINX config to include SSL.
-   */
   static async issueSslCertificate(customDomain: string, port: number) {
     if (process.env.NODE_ENV !== 'production') {
       logger.info(`SSL skip (non-production): ${customDomain}`);
@@ -171,14 +177,12 @@ export class NginxService {
 
     try {
       const domains = [customDomain];
-      // Only add www for root domains (example.com), not subdomains (test.example.com)
       const isRootDomain = customDomain.split('.').length <= 2;
       if (isRootDomain && !customDomain.startsWith('www.')) {
         domains.push(`www.${customDomain}`);
       }
       const domainArgs = domains.flatMap((d) => ['-d', d]);
 
-      // Use certonly + webroot/standalone — does NOT modify nginx configs
       await execFileAsync('sudo', [
         'certbot', 'certonly',
         '--nginx',
@@ -190,7 +194,6 @@ export class NginxService {
 
       logger.info(`SSL certificate issued for ${customDomain}`);
 
-      // Now upgrade nginx config to use SSL
       await this.upgradeToSsl(customDomain, port);
 
     } catch (error: any) {
