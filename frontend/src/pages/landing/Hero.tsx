@@ -1,24 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Play, Cloud, Server, Container, GitBranch } from 'lucide-react';
-
-function FloatingIcon({ icon: Icon, className, delay, shadow }: { icon: any; className: string; delay: number; shadow: string }) {
-  return (
-    <motion.div
-      animate={{ y: [0, -14, 0], rotateY: [0, 8, 0], rotateX: [0, -4, 0] }}
-      transition={{ duration: 3.5, repeat: Infinity, delay, ease: 'easeInOut' }}
-      className={className}
-      style={{ perspective: '600px' }}
-    >
-      <div
-        className="float-icon-3d p-3.5 rounded-2xl bg-white/[0.06] border border-white/[0.12]"
-        style={{ '--icon-shadow': shadow, transformStyle: 'preserve-3d' } as React.CSSProperties}
-      >
-        <Icon className="h-6 w-6" strokeWidth={1.8} />
-      </div>
-    </motion.div>
-  );
-}
+import { Icon3DPro, FloatingIcon3D } from '../../components/Icon3DPro';
 
 function HeroVisual() {
   return (
@@ -27,22 +10,24 @@ function HeroVisual() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-blue-600/20 rounded-full blur-[80px]" />
       <div className="absolute top-1/3 left-1/3 w-48 h-48 bg-purple-600/15 rounded-full blur-[60px]" />
 
-      {/* Central cloud */}
+      {/* Central cloud - 3D Pro */}
       <motion.div
         animate={{ y: [0, -8, 0] }}
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
       >
-        <div className="relative icon-3d">
-          <div className="icon-3d-inner">
-            <div
-              className="icon-3d-face w-32 h-32 rounded-3xl bg-gradient-to-br from-blue-500/30 to-purple-600/30 backdrop-blur-xl border border-white/[0.15] flex items-center justify-center"
-              style={{ '--icon-shadow': 'rgba(59,130,246,0.4)' } as React.CSSProperties}
-            >
-              <Cloud className="h-16 w-16 text-blue-400 drop-shadow-lg relative z-10" strokeWidth={1.5} />
-            </div>
-            <div className="icon-3d-bottom bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-b-2xl" />
-          </div>
+        <div className="relative">
+          <Icon3DPro
+            icon={Cloud}
+            gradient="from-blue-500 to-purple-600"
+            shadowColor="rgba(59, 130, 246, 0.5)"
+            size="xl"
+            depth={0.8}
+            glowIntensity={0.9}
+            hoverStrength={0.6}
+            animSpeed={6}
+            magnetic
+          />
           {/* Connection lines */}
           <svg className="absolute -top-8 -left-16 w-64 h-48 pointer-events-none" viewBox="0 0 256 192">
             <motion.line x1="128" y1="96" x2="40" y2="24" stroke="url(#grad1)" strokeWidth="1" strokeDasharray="4 4"
@@ -61,11 +46,11 @@ function HeroVisual() {
         </div>
       </motion.div>
 
-      {/* Floating icons */}
-      <FloatingIcon icon={Server} className="absolute top-8 left-8 text-blue-400" delay={0} shadow="rgba(59,130,246,0.35)" />
-      <FloatingIcon icon={Container} className="absolute top-8 right-12 text-purple-400" delay={0.5} shadow="rgba(139,92,246,0.35)" />
-      <FloatingIcon icon={GitBranch} className="absolute bottom-12 left-12 text-cyan-400" delay={1} shadow="rgba(6,182,212,0.35)" />
-      <FloatingIcon icon={Cloud} className="absolute bottom-8 right-8 text-blue-300" delay={1.5} shadow="rgba(96,165,250,0.35)" />
+      {/* Floating icons - different Z depths for parallax */}
+      <FloatingIcon3D icon={Server} className="absolute top-8 left-8 text-blue-400" delay={0} speed={0.8} zDepth={0.9} shadowColor="rgba(59,130,246,0.35)" />
+      <FloatingIcon3D icon={Container} className="absolute top-8 right-12 text-purple-400" delay={0.5} speed={1.1} zDepth={0.6} shadowColor="rgba(139,92,246,0.35)" />
+      <FloatingIcon3D icon={GitBranch} className="absolute bottom-12 left-12 text-cyan-400" delay={1} speed={0.9} zDepth={0.4} shadowColor="rgba(6,182,212,0.3)" />
+      <FloatingIcon3D icon={Cloud} className="absolute bottom-8 right-8 text-blue-300" delay={1.5} speed={1.2} zDepth={0.8} shadowColor="rgba(96,165,250,0.35)" />
 
       {/* Terminal preview */}
       <motion.div
@@ -74,7 +59,7 @@ function HeroVisual() {
         transition={{ delay: 0.8, duration: 0.6 }}
         className="absolute bottom-0 left-1/2 -translate-x-1/2 w-72"
       >
-        <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-3 font-mono text-xs shadow-2xl">
+        <div className="bg-[#0a0e17] rounded-lg border border-white/10 p-3 font-mono text-xs shadow-2xl backdrop-blur-sm">
           <div className="flex gap-1.5 mb-2">
             <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
             <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
