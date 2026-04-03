@@ -151,7 +151,8 @@ export class NginxService {
       }
       const domainArgs = domains.flatMap((d) => ['-d', d]);
 
-      await execFileAsync('certbot', [
+      await execFileAsync('sudo', [
+        'certbot',
         '--nginx',
         '--non-interactive',
         '--agree-tos',
