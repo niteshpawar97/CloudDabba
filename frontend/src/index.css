@@ -53,3 +53,50 @@ div[class*="overflow-auto"]::-webkit-scrollbar-thumb:hover {
 .animate-in {
   animation: fade-in 0.2s ease-out, slide-in-from-bottom-2 0.2s ease-out;
 }
+
+/* 3D Icon styles */
+.icon-3d {
+  perspective: 800px;
+}
+.icon-3d-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.4s ease;
+}
+.icon-3d:hover .icon-3d-inner {
+  transform: rotateY(-12deg) rotateX(8deg) scale(1.08);
+}
+.icon-3d-face {
+  box-shadow:
+    0 8px 32px -4px var(--icon-shadow, rgba(59, 130, 246, 0.3)),
+    0 2px 8px -2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
+.icon-3d-face::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%, rgba(0,0,0,0.1) 100%);
+  pointer-events: none;
+}
+.icon-3d-bottom {
+  position: absolute;
+  bottom: -6px;
+  left: 4px;
+  right: 4px;
+  height: 6px;
+  border-radius: 0 0 8px 8px;
+  opacity: 0.4;
+  filter: blur(1px);
+}
+
+/* Floating icon 3D for Hero */
+.float-icon-3d {
+  box-shadow:
+    0 12px 40px -8px var(--icon-shadow, rgba(59, 130, 246, 0.35)),
+    0 4px 12px -4px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 4px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(12px);
+}
