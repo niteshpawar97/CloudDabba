@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ProjectController } from '../controllers/project.controller';
 import { DeploymentController } from '../controllers/deployment.controller';
 import { WebhookController } from '../controllers/webhook.controller';
+import { DomainController } from '../controllers/domain.controller';
 import { createProjectValidator, updateProjectValidator, envVarsValidator } from '../validators/project.validator';
 import { validate } from '../../core/middleware/validation.middleware';
 import { authenticate } from '../../core/middleware/auth.middleware';
@@ -29,5 +30,11 @@ router.get('/:id/deployments', authenticate, DeploymentController.listByProject)
 router.get('/:id/webhook', authenticate, WebhookController.getWebhookStatus);
 router.post('/:id/webhook', authenticate, WebhookController.enableWebhook);
 router.delete('/:id/webhook', authenticate, WebhookController.disableWebhook);
+
+// Custom domain
+router.get('/:id/domain', authenticate, DomainController.getDomainStatus);
+router.post('/:id/domain', authenticate, DomainController.setDomain);
+router.post('/:id/domain/verify', authenticate, DomainController.verifyDomain);
+router.delete('/:id/domain', authenticate, DomainController.removeDomain);
 
 export default router;

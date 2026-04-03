@@ -141,33 +141,51 @@ export async function subdomainProxy(req: Request, res: Response, next: NextFunc
   const host = req.hostname || req.headers.host?.split(':')[0] || '';
   const baseDomain = config.domain.base;
 
-  // Check if request is for a deployed app subdomain
-  if (!host.endsWith(baseDomain) || host === baseDomain) {
+  let subdomain = '';
+  let isCustomDomain = false;
+
+  // Check if request is for a subdomain of base domain
+  if (host.endsWith(baseDomain) && host !== baseDomain) {
+    subdomain = host.replace(`.${baseDomain}`, '');
+    if (!subdomain || subdomain === host) return next();
+  }
+  // Check if it's a custom domain (not base domain, not localhost)
+  else if (host !== baseDomain && host !== 'localhost' && !host.startsWith('127.') && host.includes('.')) {
+    isCustomDomain = true;
+  }
+  else {
     return next();
   }
 
-  // Extract subdomain: "myapp.clouddabba.dev" → "myapp"
-  const subdomain = host.replace(`.${baseDomain}`, '');
-  if (!subdomain || subdomain === host) {
-    return next();
-  }
-
-  // Find project by subdomain
   try {
-    const project = await prisma.project.findUnique({
-      where: { subdomain },
-      include: {
-        deployments: {
-          where: { status: 'LIVE' as any },
-          orderBy: { startedAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
+    // Find project by subdomain or custom domain
+    const project = isCustomDomain
+      ? await prisma.project.findFirst({
+          where: { customDomain: host, domainVerified: true } as any,
+          include: {
+            deployments: {
+              where: { status: 'LIVE' as any },
+              orderBy: { startedAt: 'desc' },
+              take: 1,
+            },
+          },
+        })
+      : await prisma.project.findUnique({
+          where: { subdomain },
+          include: {
+            deployments: {
+              where: { status: 'LIVE' as any },
+              orderBy: { startedAt: 'desc' },
+              take: 1,
+            },
+          },
+        });
+
+    const displayName = isCustomDomain ? host : subdomain;
 
     if (!project || !project.deployments[0]?.containerPort) {
       return sendErrorPage(res, 404, 'App Not Found',
-        'There is no active deployment for this subdomain.', subdomain);
+        'There is no active deployment for this domain.', displayName);
     }
 
     const containerPort = project.deployments[0].containerPort;
@@ -191,9 +209,9 @@ export async function subdomainProxy(req: Request, res: Response, next: NextFunc
     );
 
     proxyReq.on('error', (err) => {
-      logger.error(`Proxy error for ${subdomain}: ${err.message}`);
+      logger.error(`Proxy error for ${displayName}: ${err.message}`);
       sendErrorPage(res, 502, 'App Unavailable',
-        'The application is not responding. It may have crashed or is still starting up.', subdomain);
+        'The application is not responding. It may have crashed or is still starting up.', displayName);
     });
 
     req.pipe(proxyReq);

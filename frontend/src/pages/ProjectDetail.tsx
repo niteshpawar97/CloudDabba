@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars } from '../api/projects';
+import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars, getDomainStatus, setCustomDomain, verifyCustomDomain, removeCustomDomain } from '../api/projects';
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { Project } from '../types/project';
@@ -10,7 +10,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 function relativeTime(date: string) {
@@ -54,6 +54,11 @@ export function ProjectDetail() {
   const [webhookLoading, setWebhookLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
+  // Custom domain
+  const [domainStatus, setDomainStatus] = useState<{ customDomain: string | null; verified: boolean; instructions: any } | null>(null);
+  const [newDomain, setNewDomain] = useState('');
+  const [domainLoading, setDomainLoading] = useState(false);
+
   // Env vars
   const [showEnv, setShowEnv] = useState(false);
   const [envMasked, setEnvMasked] = useState(true);
@@ -69,6 +74,7 @@ export function ProjectDetail() {
     if (projectId) {
       getProject(projectId).then(setProject).catch(() => navigate('/')).finally(() => setLoading(false));
       getWebhookStatus(projectId).then(setWebhookStatus).catch(() => {});
+      getDomainStatus(projectId).then(setDomainStatus).catch(() => {});
     }
   }, [projectId]);
 
@@ -133,6 +139,44 @@ export function ProjectDetail() {
       toast.info('Auto-deploy disabled');
     } catch {}
     setWebhookLoading(false);
+  };
+
+  const handleSetDomain = async () => {
+    if (!projectId || !newDomain.trim()) return;
+    setDomainLoading(true);
+    try {
+      const result = await setCustomDomain(projectId, newDomain.trim());
+      setDomainStatus(result);
+      setNewDomain('');
+      toast.success(result.verified ? 'Domain verified and active!' : 'Domain set — configure DNS records below');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to set domain');
+    }
+    setDomainLoading(false);
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!projectId) return;
+    setDomainLoading(true);
+    try {
+      const result = await verifyCustomDomain(projectId);
+      setDomainStatus(result);
+      toast[result.verified ? 'success' : 'info'](result.verified ? 'Domain verified!' : 'DNS not pointing to CloudDabba yet');
+    } catch (err: any) {
+      toast.error('Verification failed');
+    }
+    setDomainLoading(false);
+  };
+
+  const handleRemoveDomain = async () => {
+    if (!projectId || !confirm('Remove custom domain?')) return;
+    setDomainLoading(true);
+    try {
+      await removeCustomDomain(projectId);
+      setDomainStatus({ customDomain: null, verified: false, instructions: null });
+      toast.info('Custom domain removed');
+    } catch {}
+    setDomainLoading(false);
   };
 
   const handleAddEnv = async () => {
@@ -300,6 +344,95 @@ export function ProjectDetail() {
               <div>3. Content type: <span className="text-white">application/json</span></div>
               <div>4. Select <span className="text-white">"Just the push event"</span></div>
             </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Custom Domain */}
+      <Card className="p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${domainStatus?.customDomain ? (domainStatus.verified ? 'bg-green-500/10' : 'bg-amber-500/10') : 'bg-white/5'}`}>
+              <Link2 className={`h-5 w-5 ${domainStatus?.customDomain ? (domainStatus.verified ? 'text-green-400' : 'text-amber-400') : 'text-slate-500'}`} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Custom Domain</h3>
+              <p className="text-xs text-slate-500">
+                {domainStatus?.customDomain
+                  ? domainStatus.verified
+                    ? `${domainStatus.customDomain} is active`
+                    : `${domainStatus.customDomain} — DNS verification pending`
+                  : 'Connect your own domain (e.g. example.com)'}
+              </p>
+            </div>
+          </div>
+          {domainStatus?.customDomain && (
+            <Button size="sm" variant="danger" onClick={handleRemoveDomain} loading={domainLoading}>Remove</Button>
+          )}
+        </div>
+
+        {/* Add domain form */}
+        {!domainStatus?.customDomain && (
+          <div className="flex items-center gap-2">
+            <Input
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value.toLowerCase().trim())}
+              placeholder="example.com"
+              className="flex-1"
+            />
+            <Button onClick={handleSetDomain} loading={domainLoading} disabled={!newDomain.trim()}>
+              Add Domain
+            </Button>
+          </div>
+        )}
+
+        {/* Domain status + DNS instructions */}
+        {domainStatus?.customDomain && (
+          <div className="space-y-3">
+            {/* Status */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${domainStatus.verified ? 'bg-green-500/10 border border-green-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}>
+              {domainStatus.verified
+                ? <><CheckCircle className="h-4 w-4 text-green-400" /><span className="text-sm text-green-400">Domain verified and active</span></>
+                : <><AlertCircle className="h-4 w-4 text-amber-400" /><span className="text-sm text-amber-400">DNS verification pending</span></>
+              }
+            </div>
+
+            {/* Live URL */}
+            {domainStatus.verified && (
+              <div className="flex items-center gap-2 bg-[#0a0e14] rounded-xl px-3 py-2.5">
+                <Globe className="h-4 w-4 text-green-400" />
+                <a href={`https://${domainStatus.customDomain}`} target="_blank" className="text-green-400 text-sm hover:underline flex items-center gap-1">
+                  {domainStatus.customDomain} <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            )}
+
+            {/* DNS Setup Instructions */}
+            {!domainStatus.verified && domainStatus.instructions && (
+              <div className="bg-[#0a0e14] rounded-xl p-4 space-y-3">
+                <div className="text-xs text-slate-400 font-medium">Configure DNS at your domain registrar:</div>
+
+                <div className="text-xs space-y-2">
+                  <div className="text-slate-500 mb-1">Option 1: CNAME Record (recommended)</div>
+                  <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                    <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
+                    <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">{domainStatus.instructions.cname?.name || domainStatus.customDomain}</span></div>
+                    <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
+                  </div>
+
+                  <div className="text-slate-500 mt-3 mb-1">Option 2: A Record</div>
+                  <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                    <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">A</span></div>
+                    <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">@</span></div>
+                    <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.a?.value}</span></div>
+                  </div>
+                </div>
+
+                <Button size="sm" variant="secondary" onClick={handleVerifyDomain} loading={domainLoading}>
+                  <span className="flex items-center gap-2"><RefreshCw className="h-3.5 w-3.5" /> Verify DNS</span>
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Card>

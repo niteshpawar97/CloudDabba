@@ -8,7 +8,7 @@ import logger from '../../shared/utils/logger';
 
 const execFileAsync = promisify(execFile);
 
-const TEMPLATE = `server {
+const SUBDOMAIN_TEMPLATE = `server {
     listen 80;
     server_name <%= subdomain %>.<%= baseDomain %>;
 
@@ -26,10 +26,36 @@ const TEMPLATE = `server {
 }
 `;
 
+const CUSTOM_DOMAIN_TEMPLATE = `server {
+    listen 80;
+    server_name <%= customDomain %>;
+
+    location / {
+        proxy_pass http://127.0.0.1:<%= port %>;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+`;
+
+// Redirect www → non-www (or vice versa)
+const REDIRECT_TEMPLATE = `server {
+    listen 80;
+    server_name <%= from %>;
+    return 301 <%= protocol %>://<%= to %>$request_uri;
+}
+`;
+
 export class NginxService {
   static async generateConfig(subdomain: string, port: number) {
     try {
-      const configContent = ejs.render(TEMPLATE, {
+      const configContent = ejs.render(SUBDOMAIN_TEMPLATE, {
         subdomain,
         port,
         baseDomain: config.domain.base,
@@ -42,9 +68,54 @@ export class NginxService {
 
       await this.reload();
     } catch (error: any) {
-      // Don't fail deployment if NGINX config fails
       logger.warn(`NGINX config failed (non-fatal): ${error.message}`);
       logger.info(`App is still accessible at http://127.0.0.1:${port}`);
+    }
+  }
+
+  static async generateCustomDomainConfig(customDomain: string, port: number, wwwRedirect: 'none' | 'www-to-root' | 'root-to-www' = 'www-to-root') {
+    try {
+      const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      let configContent = ejs.render(CUSTOM_DOMAIN_TEMPLATE, { customDomain, port });
+
+      // Add www redirect
+      if (wwwRedirect === 'www-to-root' && !customDomain.startsWith('www.')) {
+        configContent += '\n' + ejs.render(REDIRECT_TEMPLATE, {
+          from: `www.${customDomain}`,
+          to: customDomain,
+          protocol,
+        });
+      } else if (wwwRedirect === 'root-to-www' && !customDomain.startsWith('www.')) {
+        configContent += '\n' + ejs.render(REDIRECT_TEMPLATE, {
+          from: customDomain,
+          to: `www.${customDomain}`,
+          protocol,
+        });
+      }
+
+      const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
+      const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
+      await fs.mkdir(config.nginx.sitesPath, { recursive: true });
+      await fs.writeFile(configPath, configContent, 'utf-8');
+      logger.info(`Custom domain NGINX config: ${configPath}`);
+
+      await this.reload();
+    } catch (error: any) {
+      logger.warn(`Custom domain NGINX config failed (non-fatal): ${error.message}`);
+    }
+  }
+
+  static async removeCustomDomainConfig(customDomain: string) {
+    try {
+      const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
+      const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
+      await fs.unlink(configPath);
+      logger.info(`Custom domain NGINX config removed: ${configPath}`);
+      await this.reload();
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.warn(`Custom domain NGINX removal failed: ${error.message}`);
+      }
     }
   }
 
