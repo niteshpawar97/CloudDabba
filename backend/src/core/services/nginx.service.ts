@@ -132,6 +132,41 @@ export class NginxService {
     }
   }
 
+  /**
+   * Auto-issue SSL certificate for custom domain via certbot.
+   * Runs after NGINX config is generated and domain is verified.
+   * Non-fatal — app works on HTTP if SSL fails.
+   */
+  static async issueSslCertificate(customDomain: string) {
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info(`SSL skip (non-production): ${customDomain}`);
+      return;
+    }
+
+    try {
+      // Build domain args: -d domain.com -d www.domain.com
+      const domains = [customDomain];
+      if (!customDomain.startsWith('www.')) {
+        domains.push(`www.${customDomain}`);
+      }
+      const domainArgs = domains.flatMap((d) => ['-d', d]);
+
+      await execFileAsync('certbot', [
+        '--nginx',
+        '--non-interactive',
+        '--agree-tos',
+        '--redirect',
+        '--email', process.env.SSL_EMAIL || 'admin@clouddabba.dev',
+        ...domainArgs,
+      ], { timeout: 120000 });
+
+      logger.info(`SSL certificate issued for ${customDomain}`);
+    } catch (error: any) {
+      // Non-fatal — app still works on HTTP
+      logger.warn(`SSL certificate failed for ${customDomain} (non-fatal): ${error.message}`);
+    }
+  }
+
   static async reload() {
     try {
       const [cmd, ...args] = config.nginx.reloadCmd.split(' ');

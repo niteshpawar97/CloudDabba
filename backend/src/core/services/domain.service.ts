@@ -110,7 +110,7 @@ export class DomainService {
       } as any,
     });
 
-    // If verified, generate NGINX config
+    // If verified, generate NGINX config + auto-SSL
     if (verification.verified) {
       const liveDeploy = await prisma.deployment.findFirst({
         where: { projectId, status: 'LIVE' as any },
@@ -118,6 +118,10 @@ export class DomainService {
       });
       if (liveDeploy?.containerPort) {
         await NginxService.generateCustomDomainConfig(domain, liveDeploy.containerPort);
+        // Auto-issue SSL certificate (async, non-blocking)
+        NginxService.issueSslCertificate(domain).catch((err) => {
+          logger.warn(`Auto-SSL failed for ${domain}: ${err.message}`);
+        });
       }
     }
 
@@ -149,7 +153,7 @@ export class DomainService {
       data: { domainVerified: verification.verified } as any,
     });
 
-    // If just got verified, generate NGINX config
+    // If just got verified, generate NGINX config + auto-SSL
     if (verification.verified && !wasVerified) {
       const liveDeploy = await prisma.deployment.findFirst({
         where: { projectId, status: 'LIVE' as any },
@@ -157,6 +161,9 @@ export class DomainService {
       });
       if (liveDeploy?.containerPort) {
         await NginxService.generateCustomDomainConfig(domain, liveDeploy.containerPort);
+        NginxService.issueSslCertificate(domain).catch((err) => {
+          logger.warn(`Auto-SSL failed for ${domain}: ${err.message}`);
+        });
       }
     }
 
