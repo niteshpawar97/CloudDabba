@@ -314,15 +314,36 @@ Standard:       Root Backend:       Monorepo:
 
 ## Custom Domains
 
-1. Go to Project Detail → Custom Domain → Add domain
-2. CloudDabba shows DNS records to configure:
-   - **Root domain** (example.com): A record → server IP
-   - **Subdomain** (app.example.com): CNAME → appname.yourdomain.dev
-3. Configure DNS at your registrar
-4. Click **Verify DNS**
-5. Auto: NGINX config generated → SSL certificate issued → HTTPS live
+### Setup Steps
 
-SSL certificates are auto-issued via Let's Encrypt certbot on domain verification.
+1. Go to **Project Detail** → **Custom Domain** section
+2. Enter your domain (e.g., `example.com` or `app.example.com`) → Click **Add Domain**
+3. CloudDabba will show DNS records to configure:
+
+| Domain Type | Record | Name | Value |
+|-------------|--------|------|-------|
+| Root domain (example.com) | **A** | `@` | Your server IP (auto-detected) |
+| Subdomain (app.example.com) | **CNAME** | `app` | `appname.yourdomain.dev` |
+
+4. Go to your **domain registrar** (GoDaddy, Namecheap, Cloudflare, etc.) and add the DNS record
+5. Come back to CloudDabba → Click **Verify DNS**
+6. On successful verification: NGINX config generated → SSL certificate issued (Let's Encrypt) → HTTPS live
+
+### UI Features
+
+- **Copy buttons** on all DNS values (IP, CNAME target) for quick copy-paste
+- **DNS Instructions card** with exact record type, name, and value to add
+- **Verify DNS button** to re-check anytime after adding records
+- **Remove Domain** button to detach custom domain from project
+- **Status indicator** — shows verified (green) or pending (yellow)
+
+### Important Notes
+
+- Custom domain setup takes **~3-5 minutes** to fully activate (DNS propagation + SSL issuance + NGINX reload). It does **not** work instantly.
+- **Root domains** (example.com) require an **A record** — CNAME cannot be used on root domains (DNS standard).
+- **Subdomains** (app.example.com) can use either **CNAME** or **A record**.
+- SSL certificates are auto-issued via **Let's Encrypt certbot** — no manual SSL setup needed.
+- Only **one custom domain** per project is supported currently.
 
 ---
 
@@ -455,12 +476,32 @@ ls -la /var/run/docker.sock
 sudo chown learn-nodejs:learn-nodejs /etc/nginx/sites-enabled
 ```
 
+### Custom domain not working
+```bash
+# Check CloudDabba domain/SSL logs
+pm2 logs clouddabba-api --lines 50 --nostream 2>&1 | grep -i "ssl\|cert\|custom\|nginx\|verified\|domain"
+
+# Check if NGINX config was generated
+sudo ls -la /etc/nginx/sites-enabled/ | grep yourdomain
+
+# Check if SSL cert exists
+sudo certbot certificates | grep -A5 yourdomain
+
+# Test NGINX config is valid
+sudo nginx -t
+```
+> Custom domain + auto-SSL takes **~3-5 minutes** after DNS verification. Don't panic if it doesn't work instantly.
+
 ### SSL certificate failed
 ```bash
 # Check certbot logs
 sudo cat /var/log/letsencrypt/letsencrypt.log | tail -50
 # Manual test
-sudo certbot certonly --nginx --dry-run -d yourdomain.com
+sudo certbot certonly --dry-run -d yourdomain.com
+# Check if port 443 is listening
+sudo ss -tlnp | grep 443
+# Check cert expiry
+sudo openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
 ```
 
 ### Container keeps restarting
