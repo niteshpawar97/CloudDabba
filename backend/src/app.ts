@@ -9,6 +9,7 @@ import { errorHandler } from './core/middleware/error-handler.middleware';
 import { generalLimiter } from './core/middleware/rate-limit.middleware';
 import { subdomainProxy } from './core/middleware/subdomain-proxy.middleware';
 import routes from './api/routes';
+import webhookRoutes from './api/routes/webhook.routes';
 
 const app = express();
 
@@ -36,6 +37,9 @@ if (config.app.nodeEnv !== 'test') {
 
 // Rate limiting
 app.use(generalLimiter);
+
+// Webhook routes (no version prefix — URLs must be stable)
+app.use('/api/webhook', webhookRoutes);
 
 // API Routes
 app.use(`/api/${config.app.apiVersion}`, routes);
