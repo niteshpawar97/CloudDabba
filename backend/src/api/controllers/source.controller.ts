@@ -50,8 +50,16 @@ export class SourceController {
                 const pkg = JSON.parse(await pkgRes.text());
                 const deps = { ...pkg.dependencies, ...pkg.devDependencies };
                 if (deps['next']) detection = { type: 'NEXTJS_APP', confidence: 'high', reason: 'Next.js detected', structure: null };
-                else if (deps['react']) detection = { type: 'REACT_FRONTEND', confidence: 'high', reason: 'React detected', structure: null };
-                else if (deps['express'] || deps['fastify']) detection = { type: 'NODE_BACKEND', confidence: 'high', reason: 'Node.js backend', structure: null };
+                else if (deps['nuxt']) detection = { type: 'NODE_BACKEND', confidence: 'high', reason: 'nuxt SSR app', structure: null };
+                else if (deps['@sveltejs/kit']) detection = { type: 'NODE_BACKEND', confidence: 'high', reason: 'sveltekit SSR app', structure: null };
+                else if (deps['react'] || deps['vue'] || deps['@angular/core'] || deps['svelte'] || deps['solid-js'] || deps['astro'] || deps['gatsby']) {
+                  const fw = deps['react'] ? 'react' : deps['vue'] ? 'vue' : deps['@angular/core'] ? 'angular' : deps['svelte'] ? 'svelte' : deps['solid-js'] ? 'solid' : deps['astro'] ? 'astro' : 'gatsby';
+                  detection = { type: 'REACT_FRONTEND', confidence: 'high', reason: `${fw} frontend`, structure: null };
+                }
+                else if (deps['express'] || deps['fastify'] || deps['koa'] || deps['@nestjs/core'] || deps['@hapi/hapi']) {
+                  const fw = deps['express'] ? 'express' : deps['fastify'] ? 'fastify' : deps['koa'] ? 'koa' : deps['@nestjs/core'] ? 'nestjs' : 'hapi';
+                  detection = { type: 'NODE_BACKEND', confidence: 'high', reason: `${fw} backend`, structure: null };
+                }
                 else detection = { type: 'NODE_BACKEND', confidence: 'medium', reason: 'Node.js project', structure: null };
               }
             } else if (fileNames.includes('index.html')) {

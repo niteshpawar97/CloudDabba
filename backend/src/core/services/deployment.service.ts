@@ -88,7 +88,21 @@ export class DeploymentService {
 
       // Step 3: Build Docker image
       imageTag = `clouddabba/${project.subdomain}:${deploymentId.slice(0, 8)}`;
-      await LogService.createLog(deploymentId, 'BUILD', `Building Docker image: ${imageTag}`);
+
+      // Framework-friendly build label
+      const fwLabels: Record<string, string> = {
+        react: 'React', vue: 'Vue', angular: 'Angular', svelte: 'Svelte',
+        astro: 'Astro', gatsby: 'Gatsby', solid: 'Solid.js',
+        nuxt: 'Nuxt', sveltekit: 'SvelteKit', nextjs: 'Next.js',
+        express: 'Express', fastify: 'Fastify', nestjs: 'NestJS',
+        koa: 'Koa', hapi: 'Hapi', adonis: 'AdonisJS', restify: 'Restify',
+      };
+      const fwMatch = detection.reason.match(/^(\w+)/);
+      const fwKey = fwMatch ? fwMatch[1].toLowerCase() : null;
+      const fwLabel = fwKey && fwLabels[fwKey] ? fwLabels[fwKey] : null;
+
+      await LogService.createLog(deploymentId, 'BUILD',
+        `Building ${fwLabel || buildType} app → Docker image: ${imageTag}`);
 
       const imageId = await DockerService.buildImage(buildDir, imageTag, deploymentId, Object.keys(buildArgs).length > 0 ? buildArgs : undefined);
       await prisma.deployment.update({

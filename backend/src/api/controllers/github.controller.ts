@@ -7,10 +7,13 @@ import { sendSuccess } from '../../shared/utils/api-response';
 const FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'web-app', 'webapp', 'site'];
 const BACKEND_DIRS = ['backend', 'server', 'api', 'service', 'services', 'app-server'];
 
+const SSR_FRAMEWORKS = ['nuxt', 'sveltekit'];
 const FRONTEND_FRAMEWORKS: Record<string, string> = {
-  'next': 'nextjs', 'react': 'react', 'react-dom': 'react', 'vue': 'vue',
-  'nuxt': 'nuxt', '@angular/core': 'angular', 'svelte': 'svelte',
-  '@sveltejs/kit': 'sveltekit', 'solid-js': 'solid', 'astro': 'astro', 'gatsby': 'gatsby',
+  'next': 'nextjs',
+  'nuxt': 'nuxt', '@sveltejs/kit': 'sveltekit',
+  'react': 'react', 'react-dom': 'react', 'vue': 'vue',
+  '@angular/core': 'angular', 'svelte': 'svelte',
+  'solid-js': 'solid', 'astro': 'astro', 'gatsby': 'gatsby',
 };
 const BACKEND_FRAMEWORKS: Record<string, string> = {
   'express': 'express', 'fastify': 'fastify', 'koa': 'koa',
@@ -214,10 +217,16 @@ export class GitHubController {
 
             // Pure frontend
             if (detectedFrontend && detectedFrontend !== 'nextjs') {
-              const hasVite = deps['vite'] || deps['@vitejs/plugin-react'] || deps['@vitejs/plugin-vue'];
-              detection.type = 'REACT_FRONTEND';
-              detection.confidence = 'high';
-              detection.reason = `${detectedFrontend}${hasVite ? ' + Vite' : ''} frontend`;
+              if (SSR_FRAMEWORKS.includes(detectedFrontend)) {
+                detection.type = 'NODE_BACKEND';
+                detection.confidence = 'high';
+                detection.reason = `${detectedFrontend} SSR app`;
+              } else {
+                const hasVite = deps['vite'] || deps['@vitejs/plugin-react'] || deps['@vitejs/plugin-vue'];
+                detection.type = 'REACT_FRONTEND';
+                detection.confidence = 'high';
+                detection.reason = `${detectedFrontend}${hasVite ? ' + Vite' : ''} frontend`;
+              }
               sendSuccess(res, detection);
               return;
             }

@@ -5,9 +5,12 @@ COPY frontend/ ./frontend/
 WORKDIR /app/frontend
 RUN npm install --legacy-peer-deps && npm run build
 RUN mkdir -p /frontend-out && \
-    if [ -d dist ]; then cp -r dist/. /frontend-out/; \
+    if ls -d dist/*/browser 2>/dev/null | head -1 | grep -q .; then \
+      cp -r $(ls -d dist/*/browser | head -1)/. /frontend-out/; \
+    elif [ -d dist ]; then cp -r dist/. /frontend-out/; \
     elif [ -d build ]; then cp -r build/. /frontend-out/; \
     elif [ -d out ]; then cp -r out/. /frontend-out/; \
+    elif [ -d public ] && [ -f public/index.html ]; then cp -r public/. /frontend-out/; \
     elif [ -d .next ]; then cp -r .next /frontend-out/.next && cp -r public /frontend-out/public 2>/dev/null; true; \
     fi
 

@@ -388,8 +388,8 @@ export function Deploy() {
               onChange={(e) => setProjectType(e.target.value as ProjectType)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-200"
             >
-              <option value="NODE_BACKEND">Node.js Backend (Express, Fastify, etc.)</option>
-              <option value="REACT_FRONTEND">React Frontend (Vite, CRA)</option>
+              <option value="NODE_BACKEND">Node.js Backend / SSR (Express, NestJS, Nuxt, SvelteKit...)</option>
+              <option value="REACT_FRONTEND">Frontend SPA (React, Vue, Angular, Svelte, Astro...)</option>
               <option value="NEXTJS_APP">Next.js Application</option>
               <option value="STATIC_SITE">Static Site (HTML/CSS/JS)</option>
               <option value="FULLSTACK">Fullstack (backend + frontend)</option>

@@ -1,3 +1,6 @@
+# CloudDabba: Node.js backend / SSR template
+# Handles: Express, Fastify, NestJS, Koa, Hapi, AdonisJS, Restify, Nuxt, SvelteKit
+# Auto-detects TypeScript, prunes devDependencies
 FROM node:22-alpine
 WORKDIR /app
 COPY package*.json ./

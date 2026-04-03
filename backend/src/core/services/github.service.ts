@@ -10,15 +10,19 @@ const execFileAsync = promisify(execFile);
 // Common directory name patterns
 const FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'web-app', 'webapp', 'site'];
 const BACKEND_DIRS = ['backend', 'server', 'api', 'service', 'services', 'app-server'];
+// SSR frameworks need Node.js runtime (not nginx static serving)
+const SSR_FRAMEWORKS = ['nuxt', 'sveltekit'];
+
 const FRONTEND_FRAMEWORKS: Record<string, string> = {
   'next': 'nextjs',
+  // SSR frameworks MUST be checked before their base frameworks (nuxt before vue, sveltekit before svelte)
+  'nuxt': 'nuxt',
+  '@sveltejs/kit': 'sveltekit',
   'react': 'react',
   'react-dom': 'react',
   'vue': 'vue',
-  'nuxt': 'nuxt',
   '@angular/core': 'angular',
   'svelte': 'svelte',
-  '@sveltejs/kit': 'sveltekit',
   'solid-js': 'solid',
   'astro': 'astro',
   'gatsby': 'gatsby',
@@ -233,6 +237,15 @@ export class GitHubService {
 
         // Pure frontend (React, Vue, Svelte, etc.)
         if (detectedFrontend && detectedFrontend !== 'nextjs') {
+          // SSR frameworks (Nuxt, SvelteKit) need Node.js runtime, not nginx static
+          if (SSR_FRAMEWORKS.includes(detectedFrontend)) {
+            return {
+              type: 'NODE_BACKEND',
+              confidence: 'high',
+              reason: `${detectedFrontend} SSR app`,
+              isTypeScript,
+            };
+          }
           const hasVite = allDeps['vite'] || allDeps['@vitejs/plugin-react'] || allDeps['@vitejs/plugin-vue'];
           const hasCRA = allDeps['react-scripts'];
           return {

@@ -1,3 +1,7 @@
+# CloudDabba: Frontend SPA template
+# Handles: React, Vue, Angular, Svelte, Astro, Gatsby, Solid.js
+# Builds with npm, normalizes output to _static/, serves with nginx
+
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
@@ -13,8 +17,12 @@ RUN mkdir -p /app/_static && \
       cp -r /app/.next/static/. /app/_static/.next/static/ && \
       cp -r /app/public/. /app/_static/public/ 2>/dev/null; \
     elif [ -d /app/out ]; then cp -r /app/out/. /app/_static/; \
+    elif ls -d /app/dist/*/browser 2>/dev/null | head -1 | grep -q .; then \
+      cp -r $(ls -d /app/dist/*/browser | head -1)/. /app/_static/; \
     elif [ -d /app/dist ]; then cp -r /app/dist/. /app/_static/; \
     elif [ -d /app/build ]; then cp -r /app/build/. /app/_static/; \
+    elif [ -d /app/public ] && [ -f /app/public/index.html ]; then \
+      cp -r /app/public/. /app/_static/; \
     elif [ -d /app/.next ]; then cp -r /app/.next/static/. /app/_static/ 2>/dev/null; \
     fi && \
     if [ ! "$(ls -A /app/_static 2>/dev/null)" ]; then \
