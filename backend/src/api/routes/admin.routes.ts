@@ -24,6 +24,8 @@ router.get('/deployments', AdminController.listAllDeployments);
 // Docker Containers
 router.get('/containers', AdminController.listContainers);
 router.post('/containers/:id/stop', AdminController.stopContainer);
+router.delete('/containers/:id', AdminController.removeContainer);
+router.post('/containers/cleanup', AdminController.cleanupContainers);
 
 // Docker Images
 router.get('/images', AdminController.listImages);

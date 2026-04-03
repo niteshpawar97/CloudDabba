@@ -27,6 +27,12 @@ export const getContainers = () =>
 export const stopContainer = (id: string) =>
   client.post(`/admin/containers/${id}/stop`);
 
+export const removeContainer = (id: string) =>
+  client.delete(`/admin/containers/${id}`);
+
+export const cleanupContainers = () =>
+  client.post<{ data: { removed: number } }>('/admin/containers/cleanup').then((r) => r.data.data);
+
 export const getSettings = () =>
   client.get<{ data: any }>('/admin/settings').then((r) => r.data.data);
 

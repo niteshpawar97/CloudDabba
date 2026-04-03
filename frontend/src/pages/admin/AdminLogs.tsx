@@ -5,20 +5,28 @@ import { LogTerminal } from '../../components/LogTerminal';
 import { DeploymentStatusBadge } from '../../components/DeploymentStatusBadge';
 import { LogLine } from '../../types/log';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function AdminLogs() {
   usePageTitle('Admin - Logs');
   const [deployments, setDeployments] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('');
 
-  useEffect(() => {
-    getAllDeployments(1, '').then((d) => {
+  const fetchDeployments = (p: number, status: string) => {
+    setLoading(true);
+    getAllDeployments(p, status).then((d) => {
       setDeployments(d.deployments || []);
-      if (d.deployments?.length > 0) setSelectedId(d.deployments[0].id);
+      setTotalPages(d.pagination?.pages || 1);
+      if (d.deployments?.length > 0 && !selectedId) setSelectedId(d.deployments[0].id);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchDeployments(page, statusFilter); }, [page, statusFilter]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -33,23 +41,58 @@ export function AdminLogs() {
 
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Deployment list */}
-        <div className="w-72 shrink-0 bg-white/[0.02] border border-white/[0.06] rounded-xl overflow-auto">
-          {deployments.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => setSelectedId(d.id)}
-              className={`w-full text-left px-4 py-3 border-b border-white/[0.04] transition-colors ${
-                selectedId === d.id ? 'bg-blue-600/20' : 'hover:bg-white/[0.03]'
-              }`}
+        <div className="w-80 shrink-0 flex flex-col bg-[#141820] border border-white/[0.06] rounded-2xl overflow-hidden">
+          {/* Filter */}
+          <div className="p-3 border-b border-white/[0.04]">
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              className="w-full px-3 py-1.5 rounded-lg bg-[#0a0e14] border border-white/[0.06] text-slate-300 text-xs"
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm text-white font-medium truncate">{d.project?.name}</span>
-                <DeploymentStatusBadge status={d.status} />
-              </div>
-              <div className="text-xs text-slate-500">{d.project?.user?.name} &bull; {new Date(d.startedAt).toLocaleString()}</div>
-            </button>
-          ))}
-          {deployments.length === 0 && <div className="text-center py-8 text-slate-500 text-sm">No deployments</div>}
+              <option value="">All Status</option>
+              <option value="LIVE">Live</option>
+              <option value="FAILED">Failed</option>
+              <option value="BUILDING">Building</option>
+              <option value="STOPPED">Stopped</option>
+            </select>
+          </div>
+
+          {/* List */}
+          <div className="flex-1 overflow-auto">
+            {deployments.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setSelectedId(d.id)}
+                className={`w-full text-left px-4 py-3 border-b border-white/[0.04] transition-colors ${
+                  selectedId === d.id ? 'bg-blue-500/15' : 'hover:bg-white/[0.03]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-white font-medium truncate">{d.project?.name || 'Unknown'}</span>
+                  <DeploymentStatusBadge status={d.status} />
+                </div>
+                <div className="text-xs text-slate-500">
+                  {d.project?.user?.name || 'Unknown user'} &bull; {new Date(d.startedAt).toLocaleString()}
+                </div>
+              </button>
+            ))}
+            {deployments.length === 0 && !loading && (
+              <div className="text-center py-8 text-slate-500 text-sm">No deployments</div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t border-white/[0.04] text-xs text-slate-500">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 hover:text-white disabled:opacity-30">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span>Page {page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 hover:text-white disabled:opacity-30">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Log viewer */}

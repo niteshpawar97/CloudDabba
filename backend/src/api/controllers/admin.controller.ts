@@ -231,6 +231,38 @@ export class AdminController {
     }
   }
 
+  // Remove exited container
+  static async removeContainer(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const container = docker.getContainer(req.params.id as string);
+      await container.remove({ force: true });
+      sendSuccess(res, null, 'Container removed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Remove all exited containers
+  static async cleanupContainers(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const containers = await docker.listContainers({
+        all: true,
+        filters: { label: ['clouddabba.managed=true'], status: ['exited'] },
+      });
+      let removed = 0;
+      for (const c of containers) {
+        try {
+          const container = docker.getContainer(c.Id);
+          await container.remove({ force: true });
+          removed++;
+        } catch {}
+      }
+      sendSuccess(res, { removed }, `Removed ${removed} exited containers`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Recent activity
   static async getActivity(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
