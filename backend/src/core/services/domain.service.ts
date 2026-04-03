@@ -99,37 +99,28 @@ export class DomainService {
     });
     if (existing) throw new AppError('This domain is already used by another project', 409);
 
-    // Verify DNS
-    const verification = await this.verifyDNS(domain, project.subdomain);
-
+    // Save domain as unverified — user must click "Verify DNS" after configuring DNS
     await prisma.project.update({
       where: { id: projectId },
       data: {
         customDomain: domain,
-        domainVerified: verification.verified,
+        domainVerified: false,
       } as any,
     });
 
-    // If verified, generate NGINX config + auto-SSL
-    if (verification.verified) {
-      const liveDeploy = await prisma.deployment.findFirst({
-        where: { projectId, status: 'LIVE' as any },
-        orderBy: { startedAt: 'desc' },
-      });
-      if (liveDeploy?.containerPort) {
-        await NginxService.generateCustomDomainConfig(domain, liveDeploy.containerPort);
-        // Auto-issue SSL certificate (async, non-blocking)
-        NginxService.issueSslCertificate(domain).catch((err) => {
-          logger.warn(`Auto-SSL failed for ${domain}: ${err.message}`);
-        });
-      }
-    }
+    // Get instructions for the user
+    const serverIP = await getServerIP();
+    const baseDomain = process.env.BASE_DOMAIN || 'clouddabba.dev';
+    const instructions = {
+      cname: { type: 'CNAME', name: domain, value: `${project.subdomain}.${baseDomain}` },
+      a: { type: 'A', name: domain, value: serverIP },
+    };
 
     return {
       customDomain: domain,
-      verified: verification.verified,
-      records: verification.records,
-      instructions: verification.instructions,
+      verified: false,
+      records: [],
+      instructions,
     };
   }
 
