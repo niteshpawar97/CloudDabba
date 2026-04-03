@@ -415,7 +415,29 @@ export function ProjectDetail() {
             {/* DNS Setup Instructions */}
             {!domainStatus.verified && domainStatus.instructions && (() => {
               const domain = domainStatus.customDomain || '';
-              const isRootDomain = domain.split('.').length <= 2; // e.g. nitesh.app (no subdomain)
+              const isRootDomain = domain.split('.').length <= 2;
+
+              const CopyVal = ({ value, color = 'text-green-400' }: { value: string; color?: string }) => (
+                <div className="flex items-center gap-1.5">
+                  <span className={`${color} font-mono`}>{value}</span>
+                  <button
+                    onClick={() => copyToClipboard(value, value)}
+                    className="p-0.5 rounded hover:bg-white/10 text-slate-600 hover:text-white transition-colors"
+                    title="Copy"
+                  >
+                    {copied === value ? <CheckCircle className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+                  </button>
+                </div>
+              );
+
+              const DnsRow = ({ type, name, value }: { type: string; name: string; value: string }) => (
+                <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                  <div><span className="text-slate-600">Type</span><br /><CopyVal value={type} color="text-blue-400" /></div>
+                  <div><span className="text-slate-600">Name</span><br /><CopyVal value={name} color="text-white" /></div>
+                  <div><span className="text-slate-600">Value</span><br /><CopyVal value={value} /></div>
+                </div>
+              );
+
               return (
                 <div className="bg-[#0a0e14] rounded-xl p-4 space-y-3">
                   <div className="text-xs text-slate-400 font-medium">Configure DNS at your domain registrar:</div>
@@ -427,35 +449,20 @@ export function ProjectDetail() {
                   )}
 
                   <div className="text-xs space-y-2">
-                    {/* A Record — recommended for root domains */}
                     <div className="text-slate-500 mb-1">{isRootDomain ? 'A Record (required for root domain)' : 'Option 1: A Record'}</div>
-                    <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
-                      <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">A</span></div>
-                      <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">@</span></div>
-                      <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.a?.value}</span></div>
-                    </div>
+                    <DnsRow type="A" name="@" value={domainStatus.instructions.a?.value} />
 
-                    {/* CNAME — only for subdomains (www, blog, etc.) */}
                     {!isRootDomain && (
                       <>
                         <div className="text-slate-500 mt-3 mb-1">Option 2: CNAME Record</div>
-                        <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
-                          <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
-                          <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">{domain}</span></div>
-                          <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
-                        </div>
+                        <DnsRow type="CNAME" name={domain} value={domainStatus.instructions.cname?.value} />
                       </>
                     )}
 
-                    {/* www redirect suggestion */}
                     {isRootDomain && (
                       <>
                         <div className="text-slate-500 mt-3 mb-1">Also add (for www redirect):</div>
-                        <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
-                          <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
-                          <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">www</span></div>
-                          <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
-                        </div>
+                        <DnsRow type="CNAME" name="www" value={domainStatus.instructions.cname?.value} />
                       </>
                     )}
                   </div>
