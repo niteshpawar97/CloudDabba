@@ -408,31 +408,59 @@ export function ProjectDetail() {
             )}
 
             {/* DNS Setup Instructions */}
-            {!domainStatus.verified && domainStatus.instructions && (
-              <div className="bg-[#0a0e14] rounded-xl p-4 space-y-3">
-                <div className="text-xs text-slate-400 font-medium">Configure DNS at your domain registrar:</div>
+            {!domainStatus.verified && domainStatus.instructions && (() => {
+              const domain = domainStatus.customDomain || '';
+              const isRootDomain = domain.split('.').length <= 2; // e.g. nitesh.app (no subdomain)
+              return (
+                <div className="bg-[#0a0e14] rounded-xl p-4 space-y-3">
+                  <div className="text-xs text-slate-400 font-medium">Configure DNS at your domain registrar:</div>
 
-                <div className="text-xs space-y-2">
-                  <div className="text-slate-500 mb-1">Option 1: CNAME Record (recommended)</div>
-                  <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
-                    <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
-                    <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">{domainStatus.instructions.cname?.name || domainStatus.customDomain}</span></div>
-                    <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
+                  {isRootDomain && (
+                    <div className="text-[11px] text-amber-400/80 bg-amber-500/5 border border-amber-500/15 rounded-lg px-3 py-2">
+                      Root domains ({domain}) cannot use CNAME. Use A Record below.
+                    </div>
+                  )}
+
+                  <div className="text-xs space-y-2">
+                    {/* A Record — recommended for root domains */}
+                    <div className="text-slate-500 mb-1">{isRootDomain ? 'A Record (required for root domain)' : 'Option 1: A Record'}</div>
+                    <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                      <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">A</span></div>
+                      <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">@</span></div>
+                      <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.a?.value}</span></div>
+                    </div>
+
+                    {/* CNAME — only for subdomains (www, blog, etc.) */}
+                    {!isRootDomain && (
+                      <>
+                        <div className="text-slate-500 mt-3 mb-1">Option 2: CNAME Record</div>
+                        <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                          <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
+                          <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">{domain}</span></div>
+                          <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* www redirect suggestion */}
+                    {isRootDomain && (
+                      <>
+                        <div className="text-slate-500 mt-3 mb-1">Also add (for www redirect):</div>
+                        <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
+                          <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">CNAME</span></div>
+                          <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">www</span></div>
+                          <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.cname?.value}</span></div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  <div className="text-slate-500 mt-3 mb-1">Option 2: A Record</div>
-                  <div className="grid grid-cols-3 gap-2 bg-white/[0.03] rounded-lg p-2.5">
-                    <div><span className="text-slate-600">Type</span><br /><span className="text-blue-400 font-mono">A</span></div>
-                    <div><span className="text-slate-600">Name</span><br /><span className="text-white font-mono">@</span></div>
-                    <div><span className="text-slate-600">Value</span><br /><span className="text-green-400 font-mono">{domainStatus.instructions.a?.value}</span></div>
-                  </div>
+                  <Button size="sm" variant="secondary" onClick={handleVerifyDomain} loading={domainLoading}>
+                    <span className="flex items-center gap-2"><RefreshCw className="h-3.5 w-3.5" /> Verify DNS</span>
+                  </Button>
                 </div>
-
-                <Button size="sm" variant="secondary" onClick={handleVerifyDomain} loading={domainLoading}>
-                  <span className="flex items-center gap-2"><RefreshCw className="h-3.5 w-3.5" /> Verify DNS</span>
-                </Button>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
       </Card>

@@ -5,23 +5,30 @@ import { NginxService } from './nginx.service';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
 
-function getServerIP(): string {
+let cachedPublicIP: string | null = null;
+
+async function getServerIP(): Promise<string> {
   if (process.env.SERVER_IP) return process.env.SERVER_IP;
-  // Auto-detect from network interfaces
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('10.') && !iface.address.startsWith('172.') && !iface.address.startsWith('192.168.')) {
-        return iface.address;
-      }
+  if (cachedPublicIP) return cachedPublicIP;
+
+  // Fetch public IP from external service (NAT-aware)
+  try {
+    const res = await fetch('https://api.ipify.org?format=text', { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      cachedPublicIP = (await res.text()).trim();
+      return cachedPublicIP;
     }
-  }
-  // Fallback: first non-internal IPv4
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+  } catch {}
+
+  // Fallback: try another service
+  try {
+    const res = await fetch('https://ifconfig.me/ip', { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      cachedPublicIP = (await res.text()).trim();
+      return cachedPublicIP;
     }
-  }
+  } catch {}
+
   return '0.0.0.0';
 }
 
@@ -33,10 +40,11 @@ export class DomainService {
   static async verifyDNS(customDomain: string, expectedSubdomain: string): Promise<{ verified: boolean; records: string[]; instructions: any }> {
     const baseDomain = process.env.BASE_DOMAIN || 'clouddabba.dev';
     const expectedCNAME = `${expectedSubdomain}.${baseDomain}`;
+    const serverIP = await getServerIP();
 
     const instructions = {
       cname: { type: 'CNAME', name: customDomain, value: expectedCNAME },
-      a: { type: 'A', name: customDomain, value: getServerIP() },
+      a: { type: 'A', name: customDomain, value: serverIP },
       www: customDomain.startsWith('www.')
         ? null
         : { type: 'CNAME', name: `www.${customDomain}`, value: expectedCNAME },
@@ -54,7 +62,6 @@ export class DomainService {
       // Check A records — match server IP
       try {
         const aRecords = await dns.resolve4(customDomain);
-        const serverIP = process.env.SERVER_IP;
         if (serverIP && aRecords.includes(serverIP)) {
           return { verified: true, records: aRecords, instructions };
         }

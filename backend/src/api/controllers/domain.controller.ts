@@ -1,25 +1,17 @@
 import { Response, NextFunction } from 'express';
-import os from 'os';
 import { DomainService } from '../../core/services/domain.service';
 import { AuthRequest } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import prisma from '../../database/connection';
 
-function getServerIP(): string {
+let cachedIP: string | null = null;
+async function getServerIP(): Promise<string> {
   if (process.env.SERVER_IP) return process.env.SERVER_IP;
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('10.') && !iface.address.startsWith('172.') && !iface.address.startsWith('192.168.')) {
-        return iface.address;
-      }
-    }
-  }
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name] || []) {
-      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
-    }
-  }
+  if (cachedIP) return cachedIP;
+  try {
+    const res = await fetch('https://api.ipify.org?format=text', { signal: AbortSignal.timeout(3000) });
+    if (res.ok) { cachedIP = (await res.text()).trim(); return cachedIP; }
+  } catch {}
   return '0.0.0.0';
 }
 
@@ -69,9 +61,10 @@ export class DomainController {
       }
 
       const baseDomain = process.env.BASE_DOMAIN || 'clouddabba.dev';
+      const serverIP = await getServerIP();
       const instructions = {
         cname: { type: 'CNAME', name: customDomain, value: `${project.subdomain}.${baseDomain}` },
-        a: { type: 'A', name: customDomain, value: getServerIP() },
+        a: { type: 'A', name: customDomain, value: serverIP },
       };
 
       sendSuccess(res, { customDomain, verified: domainVerified, instructions });
