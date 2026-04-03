@@ -1,151 +1,341 @@
 # CloudDabba - Self-hosted PaaS Platform
 
-A self-hosted deployment platform similar to Vercel/Render. Deploy GitHub repositories as Docker containers with auto-generated subdomains.
+Deploy GitHub repositories as Docker containers with auto-generated subdomains, custom domains, and auto-SSL. Like Vercel/Render, but on your own server.
+
+## Features
+
+- **Smart Detection** - Auto-detects React, Vue, Angular, Svelte, Next.js, Express, NestJS, Fastify, Nuxt, SvelteKit + more
+- **Any Repo Structure** - Monorepo, root-backend, separate dirs, single app - all handled automatically
+- **TypeScript Native** - Auto-transpiles TypeScript before deployment
+- **Docker Native** - Generates optimized Dockerfiles per project type
+- **Auto-SSL** - Let's Encrypt certificates issued automatically on custom domain verification
+- **Custom Domains** - Add your own domain with DNS verification and auto-SSL
+- **Real-time Logs** - Build + runtime container logs via WebSocket
+- **Auto-Deploy** - GitHub webhook integration for deploy on push
+- **Admin Panel** - Platform management for the owner
 
 ---
 
-## Quick Setup (Development)
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Node.js, Express, TypeScript, Prisma, PostgreSQL |
+| Frontend | React, Vite, Tailwind CSS, TypeScript |
+| Infrastructure | Docker (dockerode), NGINX, WebSocket (ws), Let's Encrypt |
+| Auth | JWT + bcrypt, AES-256 PAT encryption |
+| CI/CD | GitHub Actions + SSH deploy |
+
+---
+
+## Local Development Setup
 
 ### Prerequisites
 
-- **Node.js** v18+ → [https://nodejs.org](https://nodejs.org)
-- **Docker Desktop** → [https://docker.com/products/docker-desktop](https://docker.com/products/docker-desktop)
-- **Git** installed and available in PATH
+- Node.js v18+
+- Docker Desktop
+- Git
 
-### Step 1: Start PostgreSQL Database
+### 1. Start Database
 
 ```bash
-cd CloudDabba
 docker compose up -d
 ```
 
-This starts PostgreSQL on `localhost:5432` with:
-- User: `clouddabba`
-- Password: `password`
-- Database: `clouddabba`
-
-Verify it's running:
-```bash
-docker ps
-```
-
-### Step 2: Setup Backend
+### 2. Setup Backend
 
 ```bash
 cd backend
-
-# Install dependencies
 npm install
-
-# Generate Prisma client
 npx prisma generate
-
-# Run database migration (creates all tables)
-npx prisma migrate dev --name init
 npx prisma db push
-
-# Seed database (creates demo user + sample project)
-npx prisma db seed
-
-# (Optional) View database in browser
-npx prisma studio
+npx prisma db seed    # Creates admin user
+npm run dev            # Runs on http://localhost:4000
 ```
 
-### Step 3: Start Backend Server
-
-```bash
-cd backend
-npm run dev
-```
-
-Backend runs on **http://localhost:4000**
-
-Test it:
-```
-GET http://localhost:4000/api/v1/health
-```
-
-You should see:
-```json
-{
-  "success": true,
-  "message": "CloudDabba API is running",
-  "timestamp": "2026-03-29T..."
-}
-```
-
-### Step 4: Setup & Start Frontend
-
-Open a **new terminal**:
+### 3. Setup Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start dev server
-npm run dev
+npm run dev            # Runs on http://localhost:5173
 ```
 
-Frontend runs on **http://localhost:5173**
+### 4. Test
+
+Open http://localhost:5173 and login:
+```
+Email:    admin@clouddabba.dev
+Password: admin123
+```
 
 ---
 
-## Testing the Full Flow
+## VPS Production Setup (Ubuntu)
 
-  Demo login:
-  Email:    demo@clouddabba.dev
-  Password: demo1234
+### Prerequisites
 
+- Ubuntu VPS (Oracle Cloud, AWS, DigitalOcean, etc.)
+- Domain pointing to VPS IP (A record)
+- Ports open: 80, 443, 6050 (or your app port)
 
-1. Open **http://localhost:5173** in browser
-2. Click **Sign Up** → create an account
-3. Go to **GitHub** page → add your GitHub Personal Access Token
-   - Generate at: GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
-   - Required scope: `repo` (full access)
-4. Browse your repositories
-5. Click **Deploy** on any repo
-6. Watch real-time build logs
+### 1. Install Dependencies
 
----
+```bash
+# SSH into VPS
+ssh ubuntu@YOUR_IP
 
-## Environment Configuration
+# Install Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
 
-Backend config is in `backend/.env`:
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Install NGINX, PM2, Certbot
+sudo apt install -y nginx
+sudo npm install -g pm2
+sudo apt install -y certbot python3-certbot-nginx
+
+# Install PostgreSQL (or use Docker)
+docker run -d --name clouddabba-db \
+  -e POSTGRES_USER=clouddabba \
+  -e POSTGRES_PASSWORD=YOUR_SECURE_PASSWORD \
+  -e POSTGRES_DB=clouddabba \
+  -p 5432:5432 \
+  --restart unless-stopped \
+  postgres:16-alpine
+```
+
+### 2. Create App User
+
+```bash
+sudo useradd -m -s /bin/bash learn-nodejs
+# Give sudo access for certbot, nginx, docker
+echo 'learn-nodejs ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/clouddabba
+sudo chmod 440 /etc/sudoers.d/clouddabba
+sudo usermod -aG docker learn-nodejs
+```
+
+### 3. Clone & Build
+
+```bash
+su - learn-nodejs
+mkdir -p ~/htdocs && cd ~/htdocs
+git clone https://github.com/YOUR_USER/CloudDabba.git clouddabba
+cd clouddabba
+
+# Backend
+cd backend
+cp .env.production .env
+# Edit .env with your values (see Environment Config below)
+npm install
+npx prisma generate
+npx prisma db push
+npx prisma db seed
+npm run build
+
+# Frontend
+cd ../frontend
+npm install
+npm run build
+```
+
+### 4. Configure Environment
+
+Edit `backend/.env` (copy from `.env.production`):
 
 ```env
-# App
-NODE_ENV=development
-PORT=4000
+NODE_ENV=production
+PORT=6050
+DATABASE_URL=postgresql://clouddabba:YOUR_PASSWORD@localhost:5432/clouddabba
 
-# Database (matches docker-compose.yml)
-DATABASE_URL=postgresql://clouddabba:password@localhost:5432/clouddabba
-
-# JWT Secret (change in production!)
-JWT_SECRET=dev-secret-change-in-production-abc123
+JWT_SECRET=GENERATE_A_LONG_RANDOM_STRING
 JWT_EXPIRE=7d
+ENCRYPTION_KEY=GENERATE_64_HEX_CHARS
 
-# AES-256 Encryption Key for GitHub PAT (64 hex chars = 32 bytes)
-ENCRYPTION_KEY=a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
-
-# Domain (use localhost for dev)
-BASE_DOMAIN=localhost
-
-# Docker socket path
+BASE_DOMAIN=yourdomain.dev
 DOCKER_SOCKET=/var/run/docker.sock
 
-# NGINX (skipped in dev mode)
-NGINX_SITES_PATH=../nginx/sites
-NGINX_RELOAD_CMD=echo nginx-reload-skipped
+# NGINX - must point to sites-enabled for auto-config
+NGINX_SITES_PATH=/etc/nginx/sites-enabled
+NGINX_RELOAD_CMD=sudo nginx -s reload
 
-# Container port range
 PORT_RANGE_START=10000
 PORT_RANGE_END=20000
-
-# CORS
-CORS_ORIGIN=http://localhost:3000,http://localhost:5173
+CORS_ORIGIN=https://yourdomain.dev
+SSL_EMAIL=your@email.com
 ```
+
+### 5. Setup Wildcard SSL (Cloudflare DNS)
+
+```bash
+# Install Cloudflare plugin
+sudo apt install -y python3-certbot-dns-cloudflare
+
+# Create Cloudflare API token config
+sudo mkdir -p /etc/letsencrypt
+sudo tee /etc/letsencrypt/cloudflare.ini > /dev/null << EOF
+dns_cloudflare_api_token = YOUR_CLOUDFLARE_API_TOKEN
+EOF
+sudo chmod 600 /etc/letsencrypt/cloudflare.ini
+
+# Issue wildcard certificate
+sudo certbot certonly \
+  --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  -d yourdomain.dev \
+  -d '*.yourdomain.dev' \
+  --agree-tos --email your@email.com
+```
+
+### 6. Configure NGINX
+
+```bash
+sudo tee /etc/nginx/sites-enabled/clouddabba.conf > /dev/null << 'EOF'
+# Main app (dashboard)
+server {
+    listen 443 ssl;
+    server_name yourdomain.dev;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.dev/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:6050;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+# Wildcard subdomain (deployed apps)
+server {
+    listen 443 ssl;
+    server_name *.yourdomain.dev;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.dev/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:6050;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+# HTTP → HTTPS redirect
+server {
+    listen 80;
+    server_name yourdomain.dev *.yourdomain.dev;
+    return 301 https://$host$request_uri;
+}
+EOF
+
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 7. Start with PM2
+
+```bash
+cd ~/htdocs/clouddabba
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup  # Follow the output command with sudo
+```
+
+### 8. Setup CI/CD (GitHub Actions)
+
+1. Generate SSH key:
+```bash
+ssh-keygen -t ed25519 -C "clouddabba-deploy" -f /tmp/deploy_key -N ""
+cat /tmp/deploy_key.pub >> ~/.ssh/authorized_keys
+cat /tmp/deploy_key  # Copy this (private key)
+rm /tmp/deploy_key /tmp/deploy_key.pub
+```
+
+2. In GitHub repo: Settings → Secrets → Actions, add:
+   - `SSH_PRIVATE_KEY` = private key content
+   - `SSH_HOST` = your VPS IP
+   - `SSH_USER` = learn-nodejs
+
+3. Push to master → auto-deploys via `.github/workflows/deploy.yml`
+
+---
+
+## How Deployment Works
+
+```
+1. User adds repo (GitHub/Public URL/ZIP upload)
+2. CloudDabba scans → detects project type + framework
+3. Reorganizes repo into standard backend/ + frontend/ layout (if fullstack)
+4. Generates optimized Dockerfile (or uses custom Dockerfile)
+5. Builds Docker image (logs stream in real-time)
+6. Allocates port (range 10000-20000)
+7. Starts container with resource limits (512MB RAM, 0.5 CPU)
+8. Generates NGINX config for subdomain routing
+9. App is live at https://appname.yourdomain.dev
+```
+
+### Supported Project Types
+
+| Type | Template | Handles |
+|------|----------|---------|
+| `NODE_BACKEND` | node.Dockerfile | Express, Fastify, NestJS, Koa, Hapi, Nuxt, SvelteKit |
+| `REACT_FRONTEND` | react.Dockerfile | React, Vue, Angular, Svelte, Astro, Gatsby, Solid.js |
+| `NEXTJS_APP` | nextjs.Dockerfile | Next.js (standalone mode) |
+| `STATIC_SITE` | static.Dockerfile | HTML/CSS/JS static files |
+| `FULLSTACK` | fullstack.Dockerfile | Any backend + frontend combo (nginx + node) |
+| `CUSTOM_DOCKERFILE` | User's Dockerfile | Any custom setup |
+
+### Repo Structures Auto-Handled
+
+```
+Standard:       Root Backend:       Monorepo:
+├── backend/    ├── server.js       ├── packages/
+├── frontend/   ├── package.json    │   ├── api/
+                ├── client/         │   └── web/
+                                    └── package.json
+```
+
+---
+
+## Custom Domains
+
+1. Go to Project Detail → Custom Domain → Add domain
+2. CloudDabba shows DNS records to configure:
+   - **Root domain** (example.com): A record → server IP
+   - **Subdomain** (app.example.com): CNAME → appname.yourdomain.dev
+3. Configure DNS at your registrar
+4. Click **Verify DNS**
+5. Auto: NGINX config generated → SSL certificate issued → HTTPS live
+
+SSL certificates are auto-issued via Let's Encrypt certbot on domain verification.
+
+---
+
+## Auto-Deploy (GitHub Webhook)
+
+1. Go to Project Detail → Auto-Deploy → Enable
+2. Copy **Webhook URL** and **Secret**
+3. In GitHub repo: Settings → Webhooks → Add webhook
+   - Payload URL: paste webhook URL
+   - Content type: `application/json`
+   - Secret: paste secret
+   - Events: Just the push event
+4. Push to branch → CloudDabba auto-deploys
 
 ---
 
@@ -153,46 +343,36 @@ CORS_ORIGIN=http://localhost:3000,http://localhost:5173
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/auth/signup` | Register new user |
-| POST | `/api/v1/auth/login` | Login → returns JWT |
-| GET | `/api/v1/auth/me` | Get current user |
+| POST | `/api/v1/auth/signup` | Register |
+| POST | `/api/v1/auth/login` | Login → JWT |
+| GET | `/api/v1/auth/me` | Current user |
 | PUT | `/api/v1/auth/github-pat` | Store GitHub PAT |
-| GET | `/api/v1/github/repos` | List GitHub repos |
-| GET | `/api/v1/github/repos/:owner/:repo/branches` | List branches |
+| GET | `/api/v1/github/repos` | List repos |
 | POST | `/api/v1/projects` | Create project |
 | GET | `/api/v1/projects` | List projects |
-| GET | `/api/v1/projects/:id` | Project detail |
 | POST | `/api/v1/projects/:id/deploy` | Trigger deploy |
+| GET | `/api/v1/projects/:id/domain` | Domain status |
+| POST | `/api/v1/projects/:id/domain` | Set custom domain |
+| POST | `/api/v1/projects/:id/domain/verify` | Verify DNS |
+| POST | `/api/v1/projects/:id/webhook` | Enable auto-deploy |
 | GET | `/api/v1/deployments/:id` | Deployment detail |
 | GET | `/api/v1/deployments/:id/logs` | Get logs |
-| WS | `/ws?token=JWT&deploymentId=ID` | Real-time logs |
+| GET | `/api/v1/deployments/:id/stats` | Container CPU/memory |
+| POST | `/api/webhook/github/:projectId` | GitHub webhook (public) |
+| WS | `/ws?token=JWT&deploymentId=ID` | Real-time build logs |
+| WS | `/ws?token=JWT&deploymentId=ID&mode=container` | Runtime logs |
 
 ---
 
-## Common Issues
+## Admin Panel
 
-### "Cannot connect to database"
-- Make sure Docker is running: `docker ps`
-- Check if PostgreSQL container is up: `docker compose up -d`
-- Verify `DATABASE_URL` in `.env` matches `docker-compose.yml`
-
-### "Docker socket not found"
-- On Windows: Make sure Docker Desktop is running
-- Docker socket path may differ:
-  - Linux/Mac: `/var/run/docker.sock`
-  - Windows (WSL): `//./pipe/docker_engine`
-
-### "NGINX reload failed"
-- Expected in dev mode — `NGINX_RELOAD_CMD` is set to `echo` which is harmless
-- NGINX is only needed for production subdomain routing
-
-### Prisma migration errors
-```bash
-# Reset database completely
-npx prisma migrate reset
-# Then re-run migration
-npx prisma migrate dev --name init
-```
+Access at `/admin` (admin role required). Features:
+- Dashboard with platform stats
+- User management (role toggle, delete)
+- All projects and deployments
+- Docker container management (stop, remove, cleanup exited)
+- Docker image management (delete, cleanup unused)
+- Deployment logs viewer
 
 ---
 
@@ -200,78 +380,103 @@ npx prisma migrate dev --name init
 
 ```
 CloudDabba/
-├── backend/               # Express + TypeScript API
-│   ├── prisma/            # Database schema & migrations
+├── backend/
+│   ├── prisma/                    # Database schema
 │   ├── src/
-│   │   ├── api/           # Controllers, routes, validators
-│   │   ├── core/          # Services, middleware, types
-│   │   ├── infrastructure/# Docker, NGINX, WebSocket
-│   │   ├── database/      # Prisma connection
-│   │   └── shared/        # Config, utils, logger
-│   └── .env               # Environment config
-├── frontend/              # React + Vite + Tailwind
+│   │   ├── api/                   # Controllers, routes, validators
+│   │   ├── core/                  # Services, middleware
+│   │   │   ├── services/
+│   │   │   │   ├── deployment.service.ts   # Deploy pipeline
+│   │   │   │   ├── docker.service.ts       # Docker operations
+│   │   │   │   ├── domain.service.ts       # Custom domain + DNS
+│   │   │   │   ├── github.service.ts       # Detection engine
+│   │   │   │   ├── nginx.service.ts        # NGINX + auto-SSL
+│   │   │   │   └── log.service.ts          # Log streaming
+│   │   │   └── middleware/
+│   │   │       └── subdomain-proxy.middleware.ts
+│   │   ├── infrastructure/
+│   │   │   ├── docker/templates/  # Dockerfile templates
+│   │   │   └── websocket/         # WebSocket log streaming
+│   │   └── shared/                # Config, utils
+│   └── .env.production
+├── frontend/
 │   ├── src/
-│   │   ├── api/           # Axios API client
-│   │   ├── components/    # UI components
-│   │   ├── context/       # Auth context
-│   │   ├── hooks/         # Custom hooks
-│   │   ├── layouts/       # App & auth layouts
-│   │   ├── pages/         # All pages
-│   │   └── types/         # TypeScript types
-│   └── vite.config.ts
-├── docker-compose.yml     # PostgreSQL for dev
-├── nginx/                 # NGINX configs
-└── README.md
+│   │   ├── components/
+│   │   │   ├── ui/                # Button, Card, Input, Toast, Skeleton
+│   │   │   ├── Icon3DPro.tsx      # 3D icon system
+│   │   │   ├── LogTerminal.tsx    # Real-time log viewer
+│   │   │   └── Breadcrumbs.tsx
+│   │   ├── pages/
+│   │   │   ├── landing/           # Landing page sections
+│   │   │   ├── admin/             # Admin panel pages
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Deploy.tsx         # Deploy wizard
+│   │   │   ├── ProjectDetail.tsx  # Project + domain + webhook
+│   │   │   └── LogsViewer.tsx     # Build + runtime logs
+│   │   └── hooks/
+│   │       ├── useDeploymentLogs.ts
+│   │       ├── useContainerLogs.ts
+│   │       └── useKeyboardShortcuts.ts
+├── .github/workflows/deploy.yml   # CI/CD
+├── ecosystem.config.js            # PM2 config
+└── docker-compose.yml             # Dev database
 ```
 
 ---
 
-## Tech Stack
+## Keyboard Shortcuts
 
-- **Backend:** Node.js, Express, TypeScript, Prisma, PostgreSQL
-- **Frontend:** React, Vite, Tailwind CSS, TypeScript
-- **Infra:** Docker (dockerode), NGINX, WebSocket (ws)
-- **Auth:** JWT + bcrypt, AES-256 PAT encryption
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+D` | Go to Deploy page |
+| `Ctrl+H` | Go to Dashboard |
 
+---
 
+## Troubleshooting
 
+### Database connection failed
+```bash
+docker ps                          # Check if DB container is running
+docker compose up -d               # Start DB
+```
 
+### Docker socket not found
+```bash
+# Linux
+ls -la /var/run/docker.sock
+# Windows (Docker Desktop)
+# Use: //./pipe/dockerDesktopLinuxEngine
+```
 
+### NGINX permission denied
+```bash
+# Give app user permission
+sudo chown learn-nodejs:learn-nodejs /etc/nginx/sites-enabled
+```
 
+### SSL certificate failed
+```bash
+# Check certbot logs
+sudo cat /var/log/letsencrypt/letsencrypt.log | tail -50
+# Manual test
+sudo certbot certonly --nginx --dry-run -d yourdomain.com
+```
 
-# 1. SSH into VPS
-ssh ubuntu@129.159.16.65
+### Container keeps restarting
+```bash
+docker logs CONTAINER_NAME         # Check error
+docker ps -a --filter name=cd-     # List CloudDabba containers
+```
 
-# 2. Run setup script (installs Docker, Node, NGINX, PM2)
-curl -sSL https://raw.githubusercontent.com/... | bash
-# OR copy setup-vps.sh manually and run it
+### PM2 process not starting
+```bash
+pm2 logs clouddabba-api --lines 50
+pm2 restart clouddabba-api --update-env
+```
 
-# 3. Copy project files from local (run on your Windows)
-scp -r backend frontend nginx ecosystem.config.js ubuntu@129.159.16.65:/opt/clouddabba/
+---
 
-# 4. SSH back and setup
-ssh ubuntu@129.159.16.65
-cd /opt/clouddabba/backend
-cp .env.production .env
-npm install
-npx prisma generate
-npx prisma db push
-npx prisma db seed
-npm run build
+## License
 
-# 5. Build frontend
-cd /opt/clouddabba/frontend
-npm install
-npm run build
-
-# 6. Setup NGINX
-sudo cp /opt/clouddabba/nginx/production.conf /etc/nginx/nginx.conf
-sudo nginx -t && sudo systemctl reload nginx
-
-# 7. Start backend with PM2
-cd /opt/clouddabba
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-
-# Done! Open http://clouddabba.dev
+MIT
