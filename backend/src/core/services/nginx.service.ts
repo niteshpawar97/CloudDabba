@@ -81,7 +81,6 @@ export class NginxService {
       });
 
       const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
-      await fs.mkdir(config.nginx.sitesPath, { recursive: true });
       await fs.writeFile(configPath, configContent, 'utf-8');
       logger.info(`NGINX config generated: ${configPath}`);
 
@@ -103,7 +102,6 @@ export class NginxService {
 
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
       const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
-      await fs.mkdir(config.nginx.sitesPath, { recursive: true });
       await fs.writeFile(configPath, configContent, 'utf-8');
       logger.info(`Custom domain NGINX config (HTTP): ${configPath}`);
 
