@@ -70,17 +70,12 @@ server {
 
 // Helper: write file via sudo (for /etc/nginx/sites-enabled/)
 async function sudoWriteFile(filePath: string, content: string) {
-  await execFileAsync('sudo', ['bash', '-c', `cat > '${filePath}'`], {
-    timeout: 10000,
-  }).catch(async () => {
-    // Fallback: use sudo tee
-    const { exec } = require('child_process');
-    return new Promise<void>((resolve, reject) => {
-      const proc = exec(`sudo tee '${filePath}' > /dev/null`, (err: any) => err ? reject(err) : resolve());
-      proc.stdin.write(content);
-      proc.stdin.end();
-    });
-  });
+  const os = require('os');
+  const fs = require('fs/promises');
+  const tmpFile = path.join(os.tmpdir(), `nginx-${Date.now()}.conf`);
+  await fs.writeFile(tmpFile, content, 'utf-8');
+  await execFileAsync('sudo', ['cp', tmpFile, filePath], { timeout: 10000 });
+  await fs.unlink(tmpFile).catch(() => {});
 }
 
 async function sudoDeleteFile(filePath: string) {
