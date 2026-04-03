@@ -154,7 +154,7 @@ export function Deploy() {
     try {
       const result = await uploadZip(file);
       const name = file.name.replace(/\.(zip|tar\.gz|tgz)$/i, '');
-      setSelectedRepo({ cloneUrl: '', name, fullName: name, defaultBranch: 'main' } as Repository);
+      setSelectedRepo({ cloneUrl: `zip://${name}`, name, fullName: name, defaultBranch: 'main' } as Repository);
       setProjectName(name);
       setSubdomain(name.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
       if (result.detection) {
