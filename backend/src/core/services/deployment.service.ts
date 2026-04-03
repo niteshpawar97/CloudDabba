@@ -44,23 +44,48 @@ export class DeploymentService {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) throw new Error('Project not found');
 
-      // Step 1: Clone
+      // Step 1: Clone or copy from ZIP upload
       await this.updateStatus(deploymentId, 'CLONING');
-      await LogService.createLog(deploymentId, 'SYSTEM', `Cloning repository: ${project.repoUrl} (branch: ${project.branch})`);
+      const isZipUpload = project.repoUrl.startsWith('zip://');
 
-      let pat = '';
-      try {
-        pat = await AuthService.getDecryptedPAT(userId);
-      } catch {
-        // No PAT — clone as public repo
+      if (isZipUpload) {
+        // ZIP upload — copy from extracted path
+        await LogService.createLog(deploymentId, 'SYSTEM', `Using uploaded project: ${project.repoUrl.replace('zip://', '')}`);
+        const zipExtractDir = path.join(os.tmpdir(), 'clouddabba', 'uploads', userId, 'extracted');
+        await fs.mkdir(buildDir, { recursive: true });
+
+        // Find the actual source dir (may be inside a subfolder)
+        const entries = await fs.readdir(zipExtractDir);
+        let sourceDir = zipExtractDir;
+        if (entries.length === 1) {
+          const stat = await fs.stat(path.join(zipExtractDir, entries[0]));
+          if (stat.isDirectory()) sourceDir = path.join(zipExtractDir, entries[0]);
+        }
+
+        // Copy files to build dir
+        const sourceEntries = await fs.readdir(sourceDir);
+        for (const entry of sourceEntries) {
+          await fs.cp(path.join(sourceDir, entry), path.join(buildDir, entry), { recursive: true });
+        }
+        await LogService.createLog(deploymentId, 'SYSTEM', 'Project files ready');
+      } else {
+        // Git clone
+        await LogService.createLog(deploymentId, 'SYSTEM', `Cloning repository: ${project.repoUrl} (branch: ${project.branch})`);
+
+        let pat = '';
+        try {
+          pat = await AuthService.getDecryptedPAT(userId);
+        } catch {
+          // No PAT — clone as public repo
+        }
+        const commitHash = await GitHubService.cloneRepo(pat, project.repoUrl, project.branch, buildDir);
+
+        await prisma.deployment.update({
+          where: { id: deploymentId },
+          data: { commitHash },
+        });
+        await LogService.createLog(deploymentId, 'SYSTEM', `Cloned at commit: ${commitHash}`);
       }
-      const commitHash = await GitHubService.cloneRepo(pat, project.repoUrl, project.branch, buildDir);
-
-      await prisma.deployment.update({
-        where: { id: deploymentId },
-        data: { commitHash },
-      });
-      await LogService.createLog(deploymentId, 'SYSTEM', `Cloned at commit: ${commitHash}`);
 
       // Step 2: Detect & prepare
       await this.updateStatus(deploymentId, 'BUILDING');
