@@ -54,6 +54,25 @@ div[class*="overflow-auto"]::-webkit-scrollbar-thumb:hover {
   animation: fade-in 0.2s ease-out, slide-in-from-bottom-2 0.2s ease-out;
 }
 
+/* Toast animations */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+.animate-slide-in { animation: slide-in-right 0.3s ease-out; }
+.animate-slide-out { animation: slide-out-right 0.3s ease-in forwards; }
+
+/* Skeleton pulse */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.15; }
+}
+.skeleton-pulse { animation: skeleton-pulse 1.8s ease-in-out infinite; }
+
 /* Animated gradient for 3D icons */
 @keyframes gradient-shift {
   0% { background-position: 0% 50%; }

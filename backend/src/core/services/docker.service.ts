@@ -205,6 +205,31 @@ export class DockerService {
     }
   }
 
+  static async getContainerStats(containerId: string) {
+    try {
+      const container = docker.getContainer(containerId);
+      const stats = await container.stats({ stream: false });
+      const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
+      const systemDelta = stats.cpu_stats.system_cpu_usage - (stats.precpu_stats?.system_cpu_usage || 0);
+      const cpuCount = stats.cpu_stats.online_cpus || 1;
+      const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+      const memUsage = stats.memory_stats.usage || 0;
+      const memLimit = stats.memory_stats.limit || 1;
+      const memPercent = (memUsage / memLimit) * 100;
+      return {
+        cpu: Math.round(cpuPercent * 100) / 100,
+        memory: {
+          usage: memUsage,
+          limit: memLimit,
+          percent: Math.round(memPercent * 100) / 100,
+        },
+      };
+    } catch (error: any) {
+      logger.error(`Failed to get stats for ${containerId}:`, error);
+      return { cpu: 0, memory: { usage: 0, limit: 0, percent: 0 } };
+    }
+  }
+
   static async getContainerLogs(containerId: string, tail = 200): Promise<string> {
     try {
       const container = docker.getContainer(containerId);

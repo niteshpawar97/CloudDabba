@@ -24,3 +24,6 @@ export const getDeploymentLogs = (id: string, page = 1) =>
 
 export const getContainerLogs = (id: string, tail = 200) =>
   client.get<{ data: { logs: string } }>(`/deployments/${id}/container-logs?tail=${tail}`).then((r) => r.data.data);
+
+export const getContainerStats = (id: string) =>
+  client.get<{ data: { cpu: number; memory: { usage: number; limit: number; percent: number } } }>(`/deployments/${id}/stats`).then((r) => r.data.data);

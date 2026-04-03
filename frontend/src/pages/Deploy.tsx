@@ -11,8 +11,9 @@ import { scanPublicRepo, uploadZip } from '../api/source';
 import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
 import { getConfig, checkSubdomain } from '../api/config';
-import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe } from 'lucide-react';
+import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe, Scan, Container, Layout, FileCode2, Server } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { useToast } from '../components/ui/Toast';
 
 function parseEnvString(text: string): { key: string; value: string }[] {
   return text
@@ -37,6 +38,7 @@ export function Deploy() {
   usePageTitle('Deploy a Project');
   const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -219,8 +221,10 @@ export function Deploy() {
       });
 
       const deployment = await triggerDeploy(project.id);
+      toast.success('Deployment triggered!');
       navigate(`/logs/${deployment.id}`);
     } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Deployment failed');
       setError(err.response?.data?.message || 'Deployment failed');
       setDeploying(false);
     }
@@ -233,10 +237,33 @@ export function Deploy() {
         <h1 className="text-2xl font-bold text-white">Deploy a Project</h1>
       </div>
 
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 mb-8">
-        {[1, 2, 3].map((s) => (
-          <div key={s} className={`flex-1 h-1 rounded-full ${step >= s ? 'bg-blue-500' : 'bg-slate-700'}`} />
+      {/* Animated Step Indicator */}
+      <div className="flex items-center gap-0 mb-8">
+        {[
+          { num: 1, label: 'Source' },
+          { num: 2, label: 'Branch' },
+          { num: 3, label: 'Deploy' },
+        ].map((s, i) => (
+          <div key={s.num} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-1.5 flex-1">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500 ${
+                  step > s.num
+                    ? 'bg-green-500 text-white shadow-[0_0_16px_rgba(34,197,94,0.4)]'
+                    : step === s.num
+                      ? 'bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)] animate-pulse'
+                      : 'bg-[#1a1f2e] text-slate-500 border border-white/[0.08]'
+                }`}
+                style={{ boxShadow: step > s.num ? '0 0 16px rgba(34,197,94,0.3), inset 0 1px 0 rgba(255,255,255,0.2)' : step === s.num ? '0 0 20px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.2)' : undefined }}
+              >
+                {step > s.num ? <Check className="h-4 w-4" /> : s.num}
+              </div>
+              <span className={`text-[10px] font-medium ${step >= s.num ? 'text-slate-300' : 'text-slate-600'}`}>{s.label}</span>
+            </div>
+            {i < 2 && (
+              <div className={`h-[2px] flex-1 mx-1 rounded-full transition-all duration-500 ${step > s.num ? 'bg-green-500/50' : 'bg-white/[0.06]'}`} />
+            )}
+          </div>
         ))}
       </div>
 
@@ -369,24 +396,58 @@ export function Deploy() {
             )}
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-300">Project Type</label>
-              {detectedType && (
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  detectedType.confidence === 'high' ? 'bg-green-900/50 text-green-400' :
-                  detectedType.confidence === 'medium' ? 'bg-amber-900/50 text-amber-400' :
-                  'bg-slate-700 text-slate-400'
+          {/* Detection Preview Card */}
+          {detectedType && !scanning && (
+            <div className="bg-[#141820] border border-white/[0.06] rounded-2xl p-4 space-y-3"
+              style={{ boxShadow: '4px 4px 12px rgba(0,0,0,0.4), -2px -2px 8px rgba(255,255,255,0.02)' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/10">
+                    <Scan className="h-4 w-4 text-amber-400" />
+                  </div>
+                  <span className="text-sm font-medium text-white">Smart Detection</span>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  detectedType.confidence === 'high' ? 'bg-green-500/15 text-green-400 border border-green-500/20' :
+                  detectedType.confidence === 'medium' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
+                  'bg-slate-500/15 text-slate-400 border border-slate-500/20'
                 }`}>
-                  Auto-detected: {detectedType.reason}
+                  {detectedType.confidence} confidence
                 </span>
-              )}
-              {scanning && <span className="text-xs text-blue-400 animate-pulse">Scanning repo...</span>}
+              </div>
+              <div className="flex items-center gap-3 bg-[#0a0e14] rounded-xl px-3 py-2.5">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  {projectType === 'FULLSTACK' ? <Server className="h-5 w-5 text-purple-400" /> :
+                   projectType === 'REACT_FRONTEND' ? <Layout className="h-5 w-5 text-cyan-400" /> :
+                   projectType === 'NEXTJS_APP' ? <FileCode2 className="h-5 w-5 text-white" /> :
+                   <Container className="h-5 w-5 text-green-400" />}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">{detectedType.reason}</div>
+                  {detectedType.structure && (
+                    <div className="text-[11px] text-slate-500">
+                      {detectedType.structure.backendFramework && `Backend: ${detectedType.structure.backendFramework}`}
+                      {detectedType.structure.backendFramework && detectedType.structure.frontendFramework && ' · '}
+                      {detectedType.structure.frontendFramework && `Frontend: ${detectedType.structure.frontendFramework}`}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+          )}
+          {scanning && (
+            <div className="bg-[#141820] border border-white/[0.06] rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-blue-400">Scanning repository...</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">Project Type</label>
             <select
               value={projectType}
               onChange={(e) => setProjectType(e.target.value as ProjectType)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-200"
+              className="w-full px-4 py-2.5 rounded-xl bg-[#0f1218] border border-white/[0.06] text-slate-200 shadow-[inset_2px_2px_6px_rgba(0,0,0,0.4),inset_-1px_-1px_3px_rgba(255,255,255,0.02)] focus:outline-none focus:border-blue-500/40 transition-all"
             >
               <option value="NODE_BACKEND">Node.js Backend / SSR (Express, NestJS, Nuxt, SvelteKit...)</option>
               <option value="REACT_FRONTEND">Frontend SPA (React, Vue, Angular, Svelte, Astro...)</option>

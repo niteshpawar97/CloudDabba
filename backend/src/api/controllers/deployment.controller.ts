@@ -72,6 +72,19 @@ export class DeploymentController {
     }
   }
 
+  static async getContainerStats(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
+      if (!deployment.containerId) {
+        return sendSuccess(res, { cpu: 0, memory: { usage: 0, limit: 0, percent: 0 } });
+      }
+      const stats = await DockerService.getContainerStats(deployment.containerId);
+      sendSuccess(res, stats);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getContainerLogs(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const deployment = await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
