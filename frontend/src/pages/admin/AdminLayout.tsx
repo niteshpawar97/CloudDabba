@@ -24,7 +24,7 @@ export function AdminLayout() {
   return (
     <div className="flex min-h-screen bg-[#06080f]">
       {/* Sidebar */}
-      <aside className="w-64 bg-[#0a0e17] border-r border-white/5 flex flex-col min-h-screen">
+      <aside className="fixed top-0 left-0 bottom-0 w-64 bg-[#0a0e17] border-r border-white/5 flex flex-col z-30">
         <div className="p-6 border-b border-white/5">
           <div className="flex items-center gap-2">
             <Cloud className="h-7 w-7 text-blue-500" />
@@ -68,7 +68,7 @@ export function AdminLayout() {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 ml-64 p-8 overflow-auto min-h-screen">
         <Outlet />
       </main>
     </div>

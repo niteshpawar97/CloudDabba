@@ -25,7 +25,7 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-64 bg-[#0c0e14] border-r border-white/[0.06] flex flex-col min-h-screen">
+    <aside className="w-64 h-full bg-[#0c0e14] border-r border-white/[0.06] flex flex-col overflow-y-auto">
       <div className="p-6 border-b border-white/[0.06]">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-blue-500/10">
