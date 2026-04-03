@@ -397,13 +397,18 @@ export function ProjectDetail() {
               }
             </div>
 
-            {/* Live URL */}
+            {/* Live URL + Re-verify */}
             {domainStatus.verified && (
-              <div className="flex items-center gap-2 bg-[#0a0e14] rounded-xl px-3 py-2.5">
-                <Globe className="h-4 w-4 text-green-400" />
-                <a href={`https://${domainStatus.customDomain}`} target="_blank" className="text-green-400 text-sm hover:underline flex items-center gap-1">
-                  {domainStatus.customDomain} <ExternalLink className="h-3 w-3" />
-                </a>
+              <div className="flex items-center justify-between bg-[#0a0e14] rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-green-400" />
+                  <a href={`https://${domainStatus.customDomain}`} target="_blank" className="text-green-400 text-sm hover:underline flex items-center gap-1">
+                    {domainStatus.customDomain} <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <Button size="sm" variant="ghost" onClick={handleVerifyDomain} loading={domainLoading}>
+                  <span className="flex items-center gap-1.5"><RefreshCw className="h-3 w-3" /> Re-check</span>
+                </Button>
               </div>
             )}
 
