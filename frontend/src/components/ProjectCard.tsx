@@ -4,20 +4,28 @@ import { DeploymentStatusBadge } from './DeploymentStatusBadge';
 import { Project } from '../types/project';
 import { GitBranch, Globe, Clock } from 'lucide-react';
 
+const STATUS_NEON: Record<string, string> = {
+  ACTIVE: 'green',
+  FAILED: 'rose',
+  INACTIVE: 'amber',
+  BUILDING: 'blue',
+};
+
 export function ProjectCard({ project, baseDomain }: { project: Project; baseDomain?: string }) {
   const navigate = useNavigate();
   const latestDeploy = project.deployments?.[0];
   const domain = baseDomain || 'clouddabba.dev';
   const subdomainUrl = `https://${project.subdomain}.${domain}`;
+  const neon = STATUS_NEON[project.status] || 'blue';
 
   return (
-    <Card onClick={() => navigate(`/projects/${project.id}`)} className="hover:border-blue-500/50">
+    <Card onClick={() => navigate(`/projects/${project.id}`)} neon={neon} interactive>
       <div className="flex items-start justify-between mb-3">
         <h3 className="text-lg font-semibold text-white">{project.name}</h3>
         {latestDeploy && <DeploymentStatusBadge status={latestDeploy.status} />}
       </div>
 
-      <div className="space-y-2 text-sm text-slate-400">
+      <div className="space-y-2.5 text-sm text-slate-400">
         <div className="flex items-center gap-2">
           <Globe className="h-4 w-4 text-green-400" />
           <a
@@ -39,8 +47,8 @@ export function ProjectCard({ project, baseDomain }: { project: Project; baseDom
         </div>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-slate-700">
-        <span className="text-xs text-slate-500 uppercase">{project.projectType.replace('_', ' ')}</span>
+      <div className="mt-3 pt-3 border-t border-white/[0.06]">
+        <span className="text-xs text-slate-500 uppercase tracking-wider">{project.projectType.replace('_', ' ')}</span>
       </div>
     </Card>
   );
