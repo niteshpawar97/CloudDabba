@@ -152,7 +152,7 @@ export class DomainService {
       });
       if (liveDeploy?.containerPort) {
         await NginxService.generateCustomDomainConfig(domain, liveDeploy.containerPort);
-        NginxService.issueSslCertificate(domain).catch((err) => {
+        NginxService.issueSslCertificate(domain, liveDeploy.containerPort).catch((err) => {
           logger.warn(`Auto-SSL failed for ${domain}: ${err.message}`);
         });
       }
