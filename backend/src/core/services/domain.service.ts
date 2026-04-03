@@ -1,8 +1,29 @@
 import dns from 'dns/promises';
+import os from 'os';
 import prisma from '../../database/connection';
 import { NginxService } from './nginx.service';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
+
+function getServerIP(): string {
+  if (process.env.SERVER_IP) return process.env.SERVER_IP;
+  // Auto-detect from network interfaces
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('10.') && !iface.address.startsWith('172.') && !iface.address.startsWith('192.168.')) {
+        return iface.address;
+      }
+    }
+  }
+  // Fallback: first non-internal IPv4
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return '0.0.0.0';
+}
 
 export class DomainService {
   /**
@@ -15,7 +36,7 @@ export class DomainService {
 
     const instructions = {
       cname: { type: 'CNAME', name: customDomain, value: expectedCNAME },
-      a: { type: 'A', name: customDomain, value: process.env.SERVER_IP || '(your server IP)' },
+      a: { type: 'A', name: customDomain, value: getServerIP() },
       www: customDomain.startsWith('www.')
         ? null
         : { type: 'CNAME', name: `www.${customDomain}`, value: expectedCNAME },

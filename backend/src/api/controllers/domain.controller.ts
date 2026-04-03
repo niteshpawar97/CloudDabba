@@ -1,8 +1,27 @@
 import { Response, NextFunction } from 'express';
+import os from 'os';
 import { DomainService } from '../../core/services/domain.service';
 import { AuthRequest } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import prisma from '../../database/connection';
+
+function getServerIP(): string {
+  if (process.env.SERVER_IP) return process.env.SERVER_IP;
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('10.') && !iface.address.startsWith('172.') && !iface.address.startsWith('192.168.')) {
+        return iface.address;
+      }
+    }
+  }
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return '0.0.0.0';
+}
 
 export class DomainController {
   static async setDomain(req: AuthRequest, res: Response, next: NextFunction) {
@@ -52,7 +71,7 @@ export class DomainController {
       const baseDomain = process.env.BASE_DOMAIN || 'clouddabba.dev';
       const instructions = {
         cname: { type: 'CNAME', name: customDomain, value: `${project.subdomain}.${baseDomain}` },
-        a: { type: 'A', name: customDomain, value: process.env.SERVER_IP || '(your server IP)' },
+        a: { type: 'A', name: customDomain, value: getServerIP() },
       };
 
       sendSuccess(res, { customDomain, verified: domainVerified, instructions });
