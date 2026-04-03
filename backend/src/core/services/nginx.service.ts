@@ -94,7 +94,9 @@ export class NginxService {
 
   static async generateCustomDomainConfig(customDomain: string, port: number) {
     try {
-      const hasWww = !customDomain.startsWith('www.');
+      // Only add www for root domains (example.com), not subdomains (test.example.com)
+      const isRootDomain = customDomain.split('.').length <= 2;
+      const hasWww = isRootDomain && !customDomain.startsWith('www.');
 
       // Start with HTTP-only config so certbot can verify domain
       const configContent = ejs.render(CUSTOM_DOMAIN_HTTP_TEMPLATE, { customDomain, port, hasWww });
@@ -116,7 +118,8 @@ export class NginxService {
    */
   static async upgradeToSsl(customDomain: string, port: number) {
     try {
-      const hasWww = !customDomain.startsWith('www.');
+      const isRootDomain = customDomain.split('.').length <= 2;
+      const hasWww = isRootDomain && !customDomain.startsWith('www.');
       const configContent = ejs.render(CUSTOM_DOMAIN_SSL_TEMPLATE, { customDomain, port, hasWww });
 
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
@@ -170,7 +173,9 @@ export class NginxService {
 
     try {
       const domains = [customDomain];
-      if (!customDomain.startsWith('www.')) {
+      // Only add www for root domains (example.com), not subdomains (test.example.com)
+      const isRootDomain = customDomain.split('.').length <= 2;
+      if (isRootDomain && !customDomain.startsWith('www.')) {
         domains.push(`www.${customDomain}`);
       }
       const domainArgs = domains.flatMap((d) => ['-d', d]);
