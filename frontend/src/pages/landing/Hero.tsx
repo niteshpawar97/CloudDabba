@@ -26,7 +26,9 @@ function HeroVisual() {
             glowIntensity={0.9}
             hoverStrength={0.6}
             animSpeed={6}
-            magnetic
+            magneticStrength={0.7}
+            lightingIntensity={0.9}
+            breathe
           />
           {/* Connection lines */}
           <svg className="absolute -top-8 -left-16 w-64 h-48 pointer-events-none" viewBox="0 0 256 192">

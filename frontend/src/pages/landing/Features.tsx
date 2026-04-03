@@ -100,7 +100,9 @@ export function Features() {
                   depth={0.5}
                   glowIntensity={0.7}
                   hoverStrength={0.8}
-                  magnetic
+                  magneticStrength={0.6}
+                  lightingIntensity={0.8}
+                  breathe
                 />
               </div>
               <h3 className="text-base font-semibold mb-2 text-white">{feature.title}</h3>
