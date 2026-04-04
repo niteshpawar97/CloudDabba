@@ -44,6 +44,7 @@ interface DetectionResult {
   confidence: string;
   reason: string;
   isTypeScript?: boolean;
+  appDir?: string; // subdirectory containing the app (e.g., 'notes-app')
   structure?: {
     pattern: string;
     backendPath: string;
@@ -276,6 +277,10 @@ export class GitHubService {
       } catch {}
     }
 
+    // Subdirectory app detection — scan for package.json in subdirs
+    const subdirResult = await this.detectSubdirectoryApp(repoPath, entries);
+    if (subdirResult) return subdirResult;
+
     // Check for static files
     if (entries.includes('index.html') || entries.some(f => f.endsWith('.html'))) {
       return { type: 'STATIC_SITE', confidence: 'high', reason: 'HTML files found' };
@@ -325,6 +330,75 @@ export class GitHubService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Scan subdirectories for a deployable app when no root package.json exists.
+   * Handles repos like: /notes-app/package.json (React), /app/package.json (Express), etc.
+   */
+  private static async detectSubdirectoryApp(repoPath: string, entries: string[]): Promise<DetectionResult | null> {
+    const ignoreDirs = ['.git', 'node_modules', '.github', '.vscode', '__pycache__', '.next', 'dist', 'build', 'out'];
+    const candidates: { dir: string; result: DetectionResult }[] = [];
+
+    for (const entry of entries) {
+      if (entry.startsWith('.') || ignoreDirs.includes(entry)) continue;
+
+      const dirPath = path.join(repoPath, entry);
+      try {
+        const stat = await fs.stat(dirPath);
+        if (!stat.isDirectory()) continue;
+
+        const pkgPath = path.join(dirPath, 'package.json');
+        const content = await fs.readFile(pkgPath, 'utf-8');
+        const pkg = JSON.parse(content);
+        const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+        const scripts = pkg.scripts || {};
+
+        const subdirEntries = await fs.readdir(dirPath);
+        const isTS = subdirEntries.includes('tsconfig.json') ||
+          subdirEntries.some((f: string) => f.endsWith('.ts') && f !== 'next-env.d.ts');
+
+        // Next.js
+        if (allDeps['next'] || subdirEntries.includes('next.config.js') || subdirEntries.includes('next.config.mjs') || subdirEntries.includes('next.config.ts')) {
+          candidates.push({ dir: entry, result: { type: 'NEXTJS_APP', confidence: 'high', reason: `Next.js in /${entry}`, isTypeScript: isTS, appDir: entry } });
+          continue;
+        }
+
+        // Frontend framework
+        const detectedFrontend = this.findFramework(allDeps, FRONTEND_FRAMEWORKS);
+        if (detectedFrontend && detectedFrontend !== 'nextjs') {
+          if (SSR_FRAMEWORKS.includes(detectedFrontend)) {
+            candidates.push({ dir: entry, result: { type: 'NODE_BACKEND', confidence: 'high', reason: `${detectedFrontend} SSR in /${entry}`, isTypeScript: isTS, appDir: entry } });
+          } else {
+            const hasVite = allDeps['vite'] || allDeps['@vitejs/plugin-react'] || allDeps['@vitejs/plugin-vue'];
+            const hasCRA = allDeps['react-scripts'];
+            candidates.push({ dir: entry, result: { type: 'REACT_FRONTEND', confidence: 'high', reason: `${detectedFrontend}${hasVite ? ' + Vite' : hasCRA ? ' + CRA' : ''} in /${entry}`, isTypeScript: isTS, appDir: entry } });
+          }
+          continue;
+        }
+
+        // Backend framework
+        const detectedBackend = this.findFramework(allDeps, BACKEND_FRAMEWORKS);
+        if (detectedBackend) {
+          candidates.push({ dir: entry, result: { type: 'NODE_BACKEND', confidence: 'high', reason: `${detectedBackend} backend in /${entry}`, isTypeScript: isTS, appDir: entry } });
+          continue;
+        }
+
+        // Has build/start script
+        if (scripts['build'] || scripts['start'] || scripts['dev']) {
+          candidates.push({ dir: entry, result: { type: 'NODE_BACKEND', confidence: 'medium', reason: `Node.js app in /${entry}`, isTypeScript: isTS, appDir: entry } });
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0].result;
+
+    // Multiple candidates — pick highest confidence, prefer frontend over backend
+    const highConf = candidates.find(c => c.result.confidence === 'high');
+    return highConf?.result || candidates[0].result;
   }
 
   /**

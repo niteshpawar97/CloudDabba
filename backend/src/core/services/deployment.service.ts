@@ -94,6 +94,12 @@ export class DeploymentService {
       const tsLabel = detection.isTypeScript ? ' [TypeScript]' : '';
       await LogService.createLog(deploymentId, 'SYSTEM', `Detected project type: ${detectedType}${tsLabel} (${detection.reason})`);
 
+      // Hoist subdirectory app to root before building
+      if (detection.appDir) {
+        await LogService.createLog(deploymentId, 'BUILD', `App found in /${detection.appDir}, hoisting to root for build`);
+        await this.hoistSubdirectory(buildDir, detection.appDir);
+      }
+
       // Use project's stored type if manually set, otherwise use detected
       const buildType = project.projectType || detectedType;
       await DockerService.copyDockerfile(buildDir, buildType);
@@ -231,6 +237,39 @@ export class DeploymentService {
       // Cleanup build directory
       await fs.rm(buildDir, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  /**
+   * Hoist a subdirectory app to root so Dockerfile templates work as-is.
+   * e.g., /notes-app/package.json → /package.json
+   */
+  private static async hoistSubdirectory(buildDir: string, appDir: string) {
+    const appPath = path.join(buildDir, appDir);
+    const tmpDir = path.join(buildDir, '_clouddabba_hoist');
+
+    // Copy app contents to temp
+    await fs.mkdir(tmpDir, { recursive: true });
+    const appEntries = await fs.readdir(appPath);
+    for (const entry of appEntries) {
+      if (entry === 'node_modules') continue;
+      await fs.cp(path.join(appPath, entry), path.join(tmpDir, entry), { recursive: true });
+    }
+
+    // Clear buildDir (keep .git, Dockerfile, and fullstack support files)
+    const allEntries = await fs.readdir(buildDir);
+    for (const entry of allEntries) {
+      if (entry === '_clouddabba_hoist' || entry === '.git' || entry === 'Dockerfile' || entry.startsWith('fullstack-')) continue;
+      await fs.rm(path.join(buildDir, entry), { recursive: true, force: true });
+    }
+
+    // Move app contents to root
+    const hoistEntries = await fs.readdir(tmpDir);
+    for (const entry of hoistEntries) {
+      await fs.rename(path.join(tmpDir, entry), path.join(buildDir, entry));
+    }
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    logger.info(`Hoisted /${appDir} to root for building`);
   }
 
   /**
