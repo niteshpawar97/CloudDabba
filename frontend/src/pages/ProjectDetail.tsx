@@ -236,13 +236,22 @@ export function ProjectDetail() {
               </div>
             ) : (
               <span className="flex items-center gap-1">
-                <Globe className="h-4 w-4 text-green-400" />
-                <a href={subdomainUrl} target="_blank" className="text-green-400 hover:underline flex items-center gap-1">
-                  {project.subdomain}.{baseDomain} <ExternalLink className="h-3 w-3" />
-                </a>
-                <button onClick={() => { setEditingSubdomain(true); setNewSubdomain(project.subdomain); }} className="text-slate-500 hover:text-blue-400 ml-1">
-                  <Edit3 className="h-3 w-3" />
-                </button>
+                <Globe className={`h-4 w-4 ${domainStatus?.verified ? 'text-slate-500' : 'text-green-400'}`} />
+                {domainStatus?.verified ? (
+                  <span className="text-slate-500 flex items-center gap-1">
+                    {project.subdomain}.{baseDomain}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">redirects to {domainStatus.customDomain}</span>
+                  </span>
+                ) : (
+                  <>
+                    <a href={subdomainUrl} target="_blank" className="text-green-400 hover:underline flex items-center gap-1">
+                      {project.subdomain}.{baseDomain} <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <button onClick={() => { setEditingSubdomain(true); setNewSubdomain(project.subdomain); }} className="text-slate-500 hover:text-blue-400 ml-1">
+                      <Edit3 className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
               </span>
             )}
             <span className="flex items-center gap-1"><GitBranch className="h-4 w-4" /> {project.branch}</span>

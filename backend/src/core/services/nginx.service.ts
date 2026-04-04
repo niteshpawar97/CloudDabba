@@ -68,6 +68,14 @@ server {
 }
 `;
 
+// Redirect subdomain → custom domain (when custom domain is verified)
+const SUBDOMAIN_REDIRECT_TEMPLATE = `server {
+    listen 80;
+    server_name <%= subdomain %>.<%= baseDomain %>;
+    return 301 <%= scheme %>://<%= customDomain %>$request_uri;
+}
+`;
+
 // Helper: write file via sudo (for /etc/nginx/sites-enabled/)
 async function sudoWriteFile(filePath: string, content: string) {
   const os = require('os');
@@ -99,6 +107,29 @@ export class NginxService {
     } catch (error: any) {
       logger.warn(`NGINX config failed (non-fatal): ${error.message}`);
       logger.info(`App is still accessible at http://127.0.0.1:${port}`);
+    }
+  }
+
+  /**
+   * Replace subdomain proxy with a 301 redirect to custom domain.
+   */
+  static async generateRedirectConfig(subdomain: string, customDomain: string) {
+    try {
+      const scheme = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+      const configContent = ejs.render(SUBDOMAIN_REDIRECT_TEMPLATE, {
+        subdomain,
+        baseDomain: config.domain.base,
+        customDomain,
+        scheme,
+      });
+
+      const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
+      await sudoWriteFile(configPath, configContent);
+      logger.info(`NGINX redirect config: ${subdomain}.${config.domain.base} → ${customDomain}`);
+
+      await this.reload();
+    } catch (error: any) {
+      logger.warn(`NGINX redirect config failed (non-fatal): ${error.message}`);
     }
   }
 

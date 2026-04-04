@@ -33,6 +33,16 @@ export const changelog: ChangelogEntry[] = [
         title: 'Admin Changelog section',
         description: 'New admin panel page showing platform update history with version-wise changes.',
       },
+      {
+        type: 'feature',
+        title: 'Subdomain → Custom domain redirect',
+        description: 'When a custom domain is verified, the generated subdomain (e.g., app.clouddabba.dev) now 301 redirects to the custom domain. Removing the custom domain restores the subdomain.',
+      },
+      {
+        type: 'fix',
+        title: 'CI/CD pipeline fix',
+        description: 'Added set -e for fail-fast, GitHub PAT auth for private repo git pull, build output verification, and step-by-step logging.',
+      },
     ],
   },
   {

@@ -144,7 +144,7 @@ export class DomainService {
       data: { domainVerified: verification.verified } as any,
     });
 
-    // If just got verified, generate NGINX config + auto-SSL
+    // If just got verified, generate NGINX config + auto-SSL + subdomain redirect
     if (verification.verified && !wasVerified) {
       const liveDeploy = await prisma.deployment.findFirst({
         where: { projectId, status: 'LIVE' as any },
@@ -152,6 +152,8 @@ export class DomainService {
       });
       if (liveDeploy?.containerPort) {
         await NginxService.generateCustomDomainConfig(domain, liveDeploy.containerPort);
+        // Redirect subdomain → custom domain
+        await NginxService.generateRedirectConfig(project.subdomain, domain);
         NginxService.issueSslCertificate(domain, liveDeploy.containerPort).catch((err) => {
           logger.warn(`Auto-SSL failed for ${domain}: ${err.message}`);
         });
@@ -183,6 +185,15 @@ export class DomainService {
 
     if (domain) {
       await NginxService.removeCustomDomainConfig(domain);
+
+      // Restore subdomain proxy config (was redirect → now back to proxy)
+      const liveDeploy = await prisma.deployment.findFirst({
+        where: { projectId, status: 'LIVE' as any },
+        orderBy: { startedAt: 'desc' },
+      });
+      if (liveDeploy?.containerPort) {
+        await NginxService.generateConfig(project.subdomain, liveDeploy.containerPort);
+      }
     }
   }
 }

@@ -197,8 +197,18 @@ export class DeploymentService {
       }
 
       // Step 6: Configure NGINX
-      await NginxService.generateConfig(project.subdomain, hostPort);
-      await LogService.createLog(deploymentId, 'SYSTEM', `Subdomain configured: ${project.subdomain}.${process.env.BASE_DOMAIN}`);
+      const customDomain = (project as any).customDomain;
+      const domainVerified = (project as any).domainVerified;
+
+      if (customDomain && domainVerified) {
+        // Custom domain active → subdomain redirects to custom domain
+        await NginxService.generateRedirectConfig(project.subdomain, customDomain);
+        await NginxService.generateCustomDomainConfig(customDomain, hostPort);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Custom domain: ${customDomain} | ${project.subdomain}.${process.env.BASE_DOMAIN} → redirects`);
+      } else {
+        await NginxService.generateConfig(project.subdomain, hostPort);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Subdomain configured: ${project.subdomain}.${process.env.BASE_DOMAIN}`);
+      }
 
       // Step 7: Mark as live
       await this.updateStatus(deploymentId, 'LIVE');
