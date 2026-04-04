@@ -242,6 +242,67 @@ export class GitHubController {
           }
         }
 
+        // --- Subdirectory app detection (no root package.json) ---
+        if (detection.confidence === 'low') {
+          const ignoreDirs = ['.git', 'node_modules', '.github', '.vscode', '__pycache__', '.next', 'dist', 'build', 'out'];
+          for (const dir of dirs) {
+            if (dir.startsWith('.') || ignoreDirs.includes(dir)) continue;
+
+            const subPkg = await scanPackageJson(owner, repo, dir, pat);
+            if (!subPkg) continue;
+
+            const { deps, scripts } = subPkg;
+
+            // Next.js in subdir
+            if (deps['next']) {
+              detection.type = 'NEXTJS_APP';
+              detection.confidence = 'high';
+              detection.reason = `Next.js in /${dir}`;
+              detection.appDir = dir;
+              sendSuccess(res, detection);
+              return;
+            }
+
+            // Frontend framework in subdir
+            const detFrontend = findFramework(deps, FRONTEND_FRAMEWORKS);
+            if (detFrontend && detFrontend !== 'nextjs') {
+              if (SSR_FRAMEWORKS.includes(detFrontend)) {
+                detection.type = 'NODE_BACKEND';
+                detection.reason = `${detFrontend} SSR in /${dir}`;
+              } else {
+                const hasVite = deps['vite'] || deps['@vitejs/plugin-react'] || deps['@vitejs/plugin-vue'];
+                detection.type = 'REACT_FRONTEND';
+                detection.reason = `${detFrontend}${hasVite ? ' + Vite' : ''} in /${dir}`;
+              }
+              detection.confidence = 'high';
+              detection.appDir = dir;
+              sendSuccess(res, detection);
+              return;
+            }
+
+            // Backend framework in subdir
+            const detBackend = findFramework(deps, BACKEND_FRAMEWORKS);
+            if (detBackend) {
+              detection.type = 'NODE_BACKEND';
+              detection.confidence = 'high';
+              detection.reason = `${detBackend} backend in /${dir}`;
+              detection.appDir = dir;
+              sendSuccess(res, detection);
+              return;
+            }
+
+            // Has build/start script in subdir
+            if (scripts['build'] || scripts['start'] || scripts['dev']) {
+              detection.type = 'NODE_BACKEND';
+              detection.confidence = 'medium';
+              detection.reason = `Node.js app in /${dir}`;
+              detection.appDir = dir;
+              sendSuccess(res, detection);
+              return;
+            }
+          }
+        }
+
         // --- Fallback: only frontend dir ---
         if (frontendDir && !backendDir) {
           detection.type = 'REACT_FRONTEND';

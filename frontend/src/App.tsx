@@ -22,6 +22,7 @@ import { AdminContainers } from './pages/admin/AdminContainers';
 import { AdminLogs } from './pages/admin/AdminLogs';
 import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminImages } from './pages/admin/AdminImages';
+import { AdminChangelog } from './pages/admin/AdminChangelog';
 
 function App() {
   return (
@@ -58,6 +59,7 @@ function App() {
             <Route path="/admin/images" element={<AdminImages />} />
             <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/admin/changelog" element={<AdminChangelog />} />
           </Route>
         </Routes>
       </BrowserRouter>

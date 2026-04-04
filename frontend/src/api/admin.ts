@@ -44,3 +44,6 @@ export const deleteImage = (id: string) =>
 
 export const cleanupImages = () =>
   client.post<{ data: any }>('/admin/images/cleanup').then((r) => r.data.data);
+
+export const getChangelog = () =>
+  client.get<{ data: any[] }>('/admin/changelog').then((r) => r.data.data);

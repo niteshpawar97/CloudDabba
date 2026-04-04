@@ -100,8 +100,8 @@ export class DeploymentService {
         await this.hoistSubdirectory(buildDir, detection.appDir);
       }
 
-      // Use project's stored type if manually set, otherwise use detected
-      const buildType = project.projectType || detectedType;
+      // Prefer auto-detection (full filesystem access) over stored type when confident
+      const buildType = (detection.confidence !== 'low') ? detectedType : (project.projectType || detectedType);
       await DockerService.copyDockerfile(buildDir, buildType);
 
       // Reorganize fullstack projects into standard backend/ + frontend/ structure

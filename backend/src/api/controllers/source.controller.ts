@@ -62,8 +62,38 @@ export class SourceController {
                 }
                 else detection = { type: 'NODE_BACKEND', confidence: 'medium', reason: 'Node.js project', structure: null };
               }
-            } else if (fileNames.includes('index.html')) {
-              detection = { type: 'STATIC_SITE', confidence: 'high', reason: 'HTML files found', structure: null };
+            } else {
+              // Subdirectory app detection — scan dirs for package.json
+              const dirs = contents.filter((f: any) => f.type === 'dir').map((f: any) => f.name);
+              const ignoreDirs = ['.git', 'node_modules', '.github', '.vscode', 'dist', 'build', 'out'];
+              for (const dir of dirs) {
+                if (dir.startsWith('.') || ignoreDirs.includes(dir)) continue;
+                const subPkgRes = await fetch(
+                  `https://api.github.com/repos/${owner}/${repo}/contents/${dir}/package.json`,
+                  { headers: { Accept: 'application/vnd.github.v3.raw' } }
+                );
+                if (!subPkgRes.ok) continue;
+                try {
+                  const subPkg = JSON.parse(await subPkgRes.text());
+                  const deps = { ...subPkg.dependencies, ...subPkg.devDependencies };
+                  if (deps['next']) { detection = { type: 'NEXTJS_APP', confidence: 'high', reason: `Next.js in /${dir}`, structure: null }; break; }
+                  if (deps['react'] || deps['vue'] || deps['@angular/core'] || deps['svelte'] || deps['solid-js'] || deps['astro'] || deps['gatsby']) {
+                    const fw = deps['react'] ? 'react' : deps['vue'] ? 'vue' : deps['@angular/core'] ? 'angular' : deps['svelte'] ? 'svelte' : deps['solid-js'] ? 'solid' : deps['astro'] ? 'astro' : 'gatsby';
+                    const hasVite = deps['vite'] || deps['@vitejs/plugin-react'] || deps['@vitejs/plugin-vue'];
+                    detection = { type: 'REACT_FRONTEND', confidence: 'high', reason: `${fw}${hasVite ? ' + Vite' : ''} in /${dir}`, structure: null };
+                    break;
+                  }
+                  if (deps['express'] || deps['fastify'] || deps['koa'] || deps['@nestjs/core'] || deps['@hapi/hapi']) {
+                    const fw = deps['express'] ? 'express' : deps['fastify'] ? 'fastify' : deps['koa'] ? 'koa' : deps['@nestjs/core'] ? 'nestjs' : 'hapi';
+                    detection = { type: 'NODE_BACKEND', confidence: 'high', reason: `${fw} backend in /${dir}`, structure: null };
+                    break;
+                  }
+                } catch {}
+              }
+
+              if (detection.confidence === 'low' && (fileNames.includes('index.html') || fileNames.some((f: string) => f.endsWith('.html')))) {
+                detection = { type: 'STATIC_SITE', confidence: 'high', reason: 'HTML files found', structure: null };
+              }
             }
           }
         } catch {}

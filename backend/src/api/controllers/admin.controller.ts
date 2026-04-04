@@ -4,6 +4,7 @@ import docker from '../../infrastructure/docker/docker-client';
 import { AuthRequest, AppError } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import { DockerService } from '../../core/services/docker.service';
+import { changelog } from '../../data/changelog';
 import logger from '../../shared/utils/logger';
 
 export class AdminController {
@@ -352,6 +353,15 @@ export class AdminController {
       }
 
       sendSuccess(res, { cleaned }, `${cleaned} unused images removed`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Platform changelog
+  static async getChangelog(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, changelog);
     } catch (error) {
       next(error);
     }

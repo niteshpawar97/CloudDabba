@@ -35,4 +35,7 @@ router.post('/images/cleanup', AdminController.cleanupImages);
 // Settings
 router.get('/settings', AdminController.getSettings);
 
+// Changelog
+router.get('/changelog', AdminController.getChangelog);
+
 export default router;
