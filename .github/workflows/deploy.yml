@@ -7,6 +7,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      GH_PAT: ${{ secrets.GH_PAT }}
     steps:
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1
@@ -15,6 +17,7 @@ jobs:
           username: learn-nodejs
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 10m
+          envs: GH_PAT
           script: |
             set -e
 
@@ -22,6 +25,7 @@ jobs:
             cd "$APP_DIR"
 
             echo "=== Step 1: Pull latest code ==="
+            git remote set-url origin "https://${GH_PAT}@github.com/niteshpawar97/CloudDabba.git"
             git fetch origin master
             git reset --hard origin/master
             echo "Pulled: $(git log --oneline -1)"
