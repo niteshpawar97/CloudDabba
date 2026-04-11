@@ -3,6 +3,7 @@ import { ProjectController } from '../controllers/project.controller';
 import { DeploymentController } from '../controllers/deployment.controller';
 import { WebhookController } from '../controllers/webhook.controller';
 import { DomainController } from '../controllers/domain.controller';
+import { DatabaseController } from '../controllers/database.controller';
 import { createProjectValidator, updateProjectValidator, envVarsValidator } from '../validators/project.validator';
 import { validate } from '../../core/middleware/validation.middleware';
 import { authenticate } from '../../core/middleware/auth.middleware';
@@ -36,5 +37,12 @@ router.get('/:id/domain', authenticate, DomainController.getDomainStatus);
 router.post('/:id/domain', authenticate, DomainController.setDomain);
 router.post('/:id/domain/verify', authenticate, DomainController.verifyDomain);
 router.delete('/:id/domain', authenticate, DomainController.removeDomain);
+
+// Database provisioning
+router.get('/:id/database', authenticate, DatabaseController.getStatus);
+router.post('/:id/database/postgres', authenticate, DatabaseController.enablePostgres);
+router.delete('/:id/database/postgres', authenticate, DatabaseController.disablePostgres);
+router.post('/:id/database/redis', authenticate, DatabaseController.enableRedis);
+router.delete('/:id/database/redis', authenticate, DatabaseController.disableRedis);
 
 export default router;

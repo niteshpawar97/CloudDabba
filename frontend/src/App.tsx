@@ -23,6 +23,7 @@ import { AdminLogs } from './pages/admin/AdminLogs';
 import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminImages } from './pages/admin/AdminImages';
 import { AdminChangelog } from './pages/admin/AdminChangelog';
+import { AdminDatabases } from './pages/admin/AdminDatabases';
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function App() {
             <Route path="/admin/projects" element={<AdminProjects />} />
             <Route path="/admin/containers" element={<AdminContainers />} />
             <Route path="/admin/images" element={<AdminImages />} />
+            <Route path="/admin/databases" element={<AdminDatabases />} />
             <Route path="/admin/logs" element={<AdminLogs />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/changelog" element={<AdminChangelog />} />

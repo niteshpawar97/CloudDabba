@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars, getDomainStatus, setCustomDomain, verifyCustomDomain, removeCustomDomain } from '../api/projects';
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
+import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis } from '../api/database';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
@@ -10,7 +11,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 function relativeTime(date: string) {
@@ -59,6 +60,11 @@ export function ProjectDetail() {
   const [newDomain, setNewDomain] = useState('');
   const [domainLoading, setDomainLoading] = useState(false);
 
+  // Database provisioning
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  const [dbLoading, setDbLoading] = useState<{ pg?: boolean; redis?: boolean }>({});
+  const [showDbUrl, setShowDbUrl] = useState(false);
+
   // Env vars
   const [showEnv, setShowEnv] = useState(false);
   const [envMasked, setEnvMasked] = useState(true);
@@ -75,6 +81,7 @@ export function ProjectDetail() {
       getProject(projectId).then(setProject).catch(() => navigate('/')).finally(() => setLoading(false));
       getWebhookStatus(projectId).then(setWebhookStatus).catch(() => {});
       getDomainStatus(projectId).then(setDomainStatus).catch(() => {});
+      getDatabaseStatus(projectId).then(setDbStatus).catch(() => {});
     }
   }, [projectId]);
 
@@ -484,6 +491,121 @@ export function ProjectDetail() {
             })()}
           </div>
         )}
+      </Card>
+
+      {/* Database Provisioning */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled ? 'bg-green-500/10' : 'bg-white/5'}`}>
+              <Database className={`h-5 w-5 ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled ? 'text-green-400' : 'text-slate-500'}`} />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-white">Databases</div>
+              <div className="text-xs text-slate-500">
+                {dbStatus?.postgres?.enabled && dbStatus?.redis?.enabled ? 'PostgreSQL + Redis enabled' :
+                 dbStatus?.postgres?.enabled ? 'PostgreSQL enabled' :
+                 dbStatus?.redis?.enabled ? 'Redis enabled' : 'No databases provisioned'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {/* PostgreSQL */}
+          <div className="bg-[#0a0e14] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${dbStatus?.postgres?.enabled ? 'bg-green-400' : 'bg-slate-600'}`} />
+                <span className="text-sm font-medium text-white">PostgreSQL</span>
+              </div>
+              <Button
+                size="sm"
+                variant={dbStatus?.postgres?.enabled ? 'danger' : 'primary'}
+                loading={dbLoading.pg}
+                onClick={async () => {
+                  if (!projectId) return;
+                  if (dbStatus?.postgres?.enabled) {
+                    if (!confirm('This will permanently delete the database and all data. Continue?')) return;
+                    setDbLoading((s) => ({ ...s, pg: true }));
+                    await disablePostgres(projectId).catch(() => {});
+                  } else {
+                    setDbLoading((s) => ({ ...s, pg: true }));
+                    await enablePostgres(projectId).catch(() => {});
+                  }
+                  const updated = await getDatabaseStatus(projectId);
+                  setDbStatus(updated);
+                  setDbLoading((s) => ({ ...s, pg: false }));
+                  toast.success(dbStatus?.postgres?.enabled ? 'PostgreSQL removed' : 'PostgreSQL created');
+                }}
+              >
+                {dbStatus?.postgres?.enabled ? 'Disable' : 'Enable'}
+              </Button>
+            </div>
+            {dbStatus?.postgres?.enabled && dbStatus.postgres.databaseUrl && (
+              <div className="mt-2">
+                <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">DATABASE_URL</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-black/30 rounded px-3 py-2 text-green-400 font-mono break-all">
+                    {showDbUrl ? dbStatus.postgres.databaseUrl : dbStatus.postgres.databaseUrl.replace(/\/\/.*@/, '//****:****@')}
+                  </code>
+                  <button onClick={() => setShowDbUrl(!showDbUrl)} className="text-slate-500 hover:text-white shrink-0">
+                    {showDbUrl ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                  <button onClick={() => { navigator.clipboard.writeText(dbStatus.postgres.databaseUrl); toast.success('Copied!'); }} className="text-slate-500 hover:text-white shrink-0">
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="text-[10px] text-slate-600 mt-1">Auto-injected as DATABASE_URL on deploy</div>
+              </div>
+            )}
+          </div>
+
+          {/* Redis */}
+          <div className="bg-[#0a0e14] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${dbStatus?.redis?.enabled ? 'bg-green-400' : 'bg-slate-600'}`} />
+                <span className="text-sm font-medium text-white">Redis</span>
+              </div>
+              <Button
+                size="sm"
+                variant={dbStatus?.redis?.enabled ? 'danger' : 'primary'}
+                loading={dbLoading.redis}
+                onClick={async () => {
+                  if (!projectId) return;
+                  if (dbStatus?.redis?.enabled) {
+                    setDbLoading((s) => ({ ...s, redis: true }));
+                    await disableRedis(projectId).catch(() => {});
+                  } else {
+                    setDbLoading((s) => ({ ...s, redis: true }));
+                    await enableRedis(projectId).catch(() => {});
+                  }
+                  const updated = await getDatabaseStatus(projectId);
+                  setDbStatus(updated);
+                  setDbLoading((s) => ({ ...s, redis: false }));
+                  toast.success(dbStatus?.redis?.enabled ? 'Redis removed' : 'Redis created');
+                }}
+              >
+                {dbStatus?.redis?.enabled ? 'Disable' : 'Enable'}
+              </Button>
+            </div>
+            {dbStatus?.redis?.enabled && dbStatus.redis.redisUrl && (
+              <div className="mt-2">
+                <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">REDIS_URL</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-black/30 rounded px-3 py-2 text-red-400 font-mono break-all">
+                    {dbStatus.redis.redisUrl}
+                  </code>
+                  <button onClick={() => { navigator.clipboard.writeText(dbStatus.redis.redisUrl); toast.success('Copied!'); }} className="text-slate-500 hover:text-white shrink-0">
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="text-[10px] text-slate-600 mt-1">Auto-injected as REDIS_URL on deploy</div>
+              </div>
+            )}
+          </div>
+        </div>
       </Card>
 
       {/* Environment Variables */}

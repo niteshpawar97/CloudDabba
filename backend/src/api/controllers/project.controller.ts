@@ -3,6 +3,7 @@ import { ProjectService } from '../../core/services/project.service';
 import { DeploymentService } from '../../core/services/deployment.service';
 import { DockerService } from '../../core/services/docker.service';
 import { NginxService } from '../../core/services/nginx.service';
+import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import { AuthRequest } from '../../core/types';
 import { sendSuccess, sendCreated } from '../../shared/utils/api-response';
 
@@ -51,6 +52,12 @@ export class ProjectController {
         if (dep.containerId) {
           await DockerService.stopContainer(dep.containerId).catch(() => {});
         }
+      }
+
+      // Cleanup provisioned databases
+      const projData = await ProjectService.getById(req.params.id as string, req.user!.id).catch(() => null);
+      if (projData && (projData as any).dbEnabled) {
+        await DatabaseProvisionService.dropProjectDatabase(projData as any).catch(() => {});
       }
 
       const project = await ProjectService.delete(req.params.id as string, req.user!.id);

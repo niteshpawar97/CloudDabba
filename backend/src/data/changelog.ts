@@ -10,6 +10,32 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.4.0',
+    date: '2026-04-11',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Per-project PostgreSQL databases',
+        description: 'Each project can now get its own PostgreSQL database with auto-generated credentials. DATABASE_URL is auto-injected into containers on deploy.',
+      },
+      {
+        type: 'feature',
+        title: 'Per-project Redis',
+        description: 'Each project can enable Redis with a dedicated database number. REDIS_URL is auto-injected into containers on deploy.',
+      },
+      {
+        type: 'feature',
+        title: 'Admin Databases page',
+        description: 'New admin panel page showing all provisioned PostgreSQL and Redis databases across all projects.',
+      },
+      {
+        type: 'improvement',
+        title: 'Docker network for database access',
+        description: 'Deployed containers are automatically connected to the clouddabba Docker network for direct database/Redis access.',
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-04-04',
     changes: [

@@ -12,7 +12,27 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - clouddabba
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: clouddabba-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - clouddabba
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+
+networks:
+  clouddabba:
+    name: clouddabba
+    driver: bridge

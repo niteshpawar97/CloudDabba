@@ -47,3 +47,6 @@ export const cleanupImages = () =>
 
 export const getChangelog = () =>
   client.get<{ data: any[] }>('/admin/changelog').then((r) => r.data.data);
+
+export const getDatabases = () =>
+  client.get<{ data: any[] }>('/admin/databases').then((r) => r.data.data);

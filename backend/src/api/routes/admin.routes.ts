@@ -38,4 +38,7 @@ router.get('/settings', AdminController.getSettings);
 // Changelog
 router.get('/changelog', AdminController.getChangelog);
 
+// Databases
+router.get('/databases', AdminController.listDatabases);
+
 export default router;

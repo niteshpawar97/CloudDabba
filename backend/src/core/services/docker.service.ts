@@ -96,6 +96,15 @@ export class DockerService {
     });
 
     await container.start();
+
+    // Connect to clouddabba network (for database/redis access)
+    try {
+      const network = docker.getNetwork('clouddabba');
+      await network.connect({ Container: container.id });
+    } catch {
+      // Network may not exist in standalone mode — non-fatal
+    }
+
     logger.info(`Container ${containerName} started on port ${hostPort}`);
     return container;
   }

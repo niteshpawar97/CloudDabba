@@ -37,4 +37,14 @@ export const config = {
   logging: {
     level: process.env.LOG_LEVEL || 'debug',
   },
+  provisionDb: {
+    adminUrl: process.env.PROVISION_DB_ADMIN_URL || 'postgresql://clouddabba:password@localhost:5432/postgres',
+    host: process.env.PROVISION_DB_HOST || 'localhost',
+    port: parseInt(process.env.PROVISION_DB_PORT || '5432', 10),
+  },
+  redis: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || '',
+  },
 } as const;

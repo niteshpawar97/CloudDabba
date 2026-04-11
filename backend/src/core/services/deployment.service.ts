@@ -158,6 +158,20 @@ export class DeploymentService {
         delete envVars['port'];
       }
 
+      // Inject provisioned database URLs
+      const proj = project as any;
+      if (proj.dbEnabled && proj.dbPasswordEnc && proj.dbName && proj.dbUser) {
+        const { decrypt } = await import('./encryption.service');
+        const { DatabaseProvisionService } = await import('./database-provision.service');
+        envVars['DATABASE_URL'] = DatabaseProvisionService.buildDatabaseUrl(proj.dbUser, decrypt(proj.dbPasswordEnc), proj.dbName);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Injected DATABASE_URL (db: ${proj.dbName})`);
+      }
+      if (proj.redisEnabled && proj.redisDbNumber != null) {
+        const { DatabaseProvisionService } = await import('./database-provision.service');
+        envVars['REDIS_URL'] = DatabaseProvisionService.buildRedisUrl(proj.redisDbNumber);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Injected REDIS_URL (db: ${proj.redisDbNumber})`);
+      }
+
       const container = await DockerService.createAndStartContainer(
         imageTag,
         containerName,

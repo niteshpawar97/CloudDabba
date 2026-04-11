@@ -55,6 +55,13 @@ model Project {
   webhookSecret String?       @map("webhook_secret") @db.VarChar(64)
   customDomain  String?       @unique @map("custom_domain") @db.VarChar(255)
   domainVerified Boolean      @default(false) @map("domain_verified")
+  // Database provisioning
+  dbEnabled       Boolean     @default(false) @map("db_enabled")
+  dbName          String?     @map("db_name") @db.VarChar(63)
+  dbUser          String?     @map("db_user") @db.VarChar(63)
+  dbPasswordEnc   String?     @map("db_password_enc") @db.Text
+  redisEnabled    Boolean     @default(false) @map("redis_enabled")
+  redisDbNumber   Int?        @map("redis_db_number")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -5,18 +5,21 @@ import { AuthRequest, AppError } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
+import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import logger from '../../shared/utils/logger';
 
 export class AdminController {
   // Dashboard stats
   static async getStats(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const [totalUsers, totalProjects, totalDeployments, liveDeployments, failedDeployments] = await Promise.all([
+      const [totalUsers, totalProjects, totalDeployments, liveDeployments, failedDeployments, provisionedDbs, provisionedRedis] = await Promise.all([
         prisma.user.count(),
         prisma.project.count(),
         prisma.deployment.count(),
         prisma.deployment.count({ where: { status: 'LIVE' as any } }),
         prisma.deployment.count({ where: { status: 'FAILED' as any } }),
+        prisma.project.count({ where: { dbEnabled: true } as any }),
+        prisma.project.count({ where: { redisEnabled: true } as any }),
       ]);
 
       // Docker stats
@@ -64,6 +67,8 @@ export class AdminController {
           failedDeployments,
           containers,
           images,
+          provisionedDbs,
+          provisionedRedis,
         },
         chartData: Object.values(deploymentsByDay),
       });
@@ -362,6 +367,16 @@ export class AdminController {
   static async getChangelog(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       sendSuccess(res, changelog);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Provisioned databases
+  static async listDatabases(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const databases = await DatabaseProvisionService.listAllDatabases();
+      sendSuccess(res, databases);
     } catch (error) {
       next(error);
     }
