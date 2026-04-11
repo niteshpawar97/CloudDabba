@@ -556,18 +556,22 @@ export function ProjectDetail() {
                 loading={dbLoading.pg}
                 onClick={async () => {
                   if (!projectId) return;
-                  if (dbStatus?.postgres?.enabled) {
-                    if (!confirm('This will permanently delete the database and all data. Continue?')) return;
-                    setDbLoading((s) => ({ ...s, pg: true }));
-                    await disablePostgres(projectId).catch(() => {});
-                  } else {
-                    setDbLoading((s) => ({ ...s, pg: true }));
-                    await enablePostgres(projectId).catch(() => {});
+                  setDbLoading((s) => ({ ...s, pg: true }));
+                  try {
+                    if (dbStatus?.postgres?.enabled) {
+                      if (!confirm('This will permanently delete the database and all data. Continue?')) { setDbLoading((s) => ({ ...s, pg: false })); return; }
+                      await disablePostgres(projectId);
+                      toast.success('PostgreSQL removed');
+                    } else {
+                      await enablePostgres(projectId);
+                      toast.success('PostgreSQL created');
+                    }
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || 'Failed');
                   }
-                  const updated = await getDatabaseStatus(projectId);
+                  const updated = await getDatabaseStatus(projectId).catch(() => dbStatus);
                   setDbStatus(updated);
                   setDbLoading((s) => ({ ...s, pg: false }));
-                  toast.success(dbStatus?.postgres?.enabled ? 'PostgreSQL removed' : 'PostgreSQL created');
                 }}
               >
                 {dbStatus?.postgres?.enabled ? 'Disable' : 'Enable'}
@@ -605,17 +609,21 @@ export function ProjectDetail() {
                 loading={dbLoading.redis}
                 onClick={async () => {
                   if (!projectId) return;
-                  if (dbStatus?.redis?.enabled) {
-                    setDbLoading((s) => ({ ...s, redis: true }));
-                    await disableRedis(projectId).catch(() => {});
-                  } else {
-                    setDbLoading((s) => ({ ...s, redis: true }));
-                    await enableRedis(projectId).catch(() => {});
+                  setDbLoading((s) => ({ ...s, redis: true }));
+                  try {
+                    if (dbStatus?.redis?.enabled) {
+                      await disableRedis(projectId);
+                      toast.success('Redis removed');
+                    } else {
+                      await enableRedis(projectId);
+                      toast.success('Redis created');
+                    }
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || 'Failed');
                   }
-                  const updated = await getDatabaseStatus(projectId);
+                  const updated = await getDatabaseStatus(projectId).catch(() => dbStatus);
                   setDbStatus(updated);
                   setDbLoading((s) => ({ ...s, redis: false }));
-                  toast.success(dbStatus?.redis?.enabled ? 'Redis removed' : 'Redis created');
                 }}
               >
                 {dbStatus?.redis?.enabled ? 'Disable' : 'Enable'}
