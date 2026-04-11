@@ -27,15 +27,16 @@ export class DatabaseProvisionService {
         await adminClient.query(`CREATE USER "${dbUser}" WITH PASSWORD '${dbPassword}'`);
       } catch (err: any) {
         if (err.code === '42710') {
-          // User exists — update password
           await adminClient.query(`ALTER USER "${dbUser}" WITH PASSWORD '${dbPassword}'`);
         } else throw err;
       }
+      // Grant new role to admin so it can set OWNER
+      await adminClient.query(`GRANT "${dbUser}" TO CURRENT_USER`);
       // Create database if not exists
       try {
         await adminClient.query(`CREATE DATABASE "${dbName}" OWNER "${dbUser}"`);
       } catch (err: any) {
-        if (err.code !== '42P04') throw err; // 42P04 = already exists
+        if (err.code !== '42P04') throw err;
       }
       await adminClient.query(`GRANT ALL PRIVILEGES ON DATABASE "${dbName}" TO "${dbUser}"`);
       logger.info(`Provisioned PostgreSQL: ${dbName} (user: ${dbUser})`);
