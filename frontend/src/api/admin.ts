@@ -50,3 +50,9 @@ export const getChangelog = () =>
 
 export const getDatabases = () =>
   client.get<{ data: any[] }>('/admin/databases').then((r) => r.data.data);
+
+export const adminDeletePostgres = (projectId: string) =>
+  client.delete(`/admin/databases/${projectId}/postgres`);
+
+export const adminDeleteRedis = (projectId: string) =>
+  client.delete(`/admin/databases/${projectId}/redis`);

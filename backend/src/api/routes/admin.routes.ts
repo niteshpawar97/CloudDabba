@@ -40,5 +40,7 @@ router.get('/changelog', AdminController.getChangelog);
 
 // Databases
 router.get('/databases', AdminController.listDatabases);
+router.delete('/databases/:id/postgres', AdminController.adminDeletePostgres);
+router.delete('/databases/:id/redis', AdminController.adminDeleteRedis);
 
 export default router;

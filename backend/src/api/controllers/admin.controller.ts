@@ -381,4 +381,27 @@ export class AdminController {
       next(error);
     }
   }
+
+  // Admin: force delete a project's postgres
+  static async adminDeletePostgres(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const project = await prisma.project.findUnique({ where: { id: req.params.id as string } });
+      if (!project) throw new AppError('Project not found', 404);
+      await DatabaseProvisionService.dropProjectDatabase(project as any);
+      await prisma.project.update({ where: { id: req.params.id as string }, data: { dbEnabled: false, dbName: null, dbUser: null, dbPasswordEnc: null } as any });
+      sendSuccess(res, null, 'PostgreSQL database deleted');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Admin: force delete a project's redis
+  static async adminDeleteRedis(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await prisma.project.update({ where: { id: req.params.id as string }, data: { redisEnabled: false, redisDbNumber: null } as any });
+      sendSuccess(res, null, 'Redis database deleted');
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -15,8 +15,10 @@ export class DatabaseProvisionService {
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
     if ((project as any).dbEnabled) throw new AppError('Database already enabled', 409);
 
-    const dbName = `cd_${project.subdomain.replace(/-/g, '_')}`;
-    const dbUser = `cd_${project.subdomain.replace(/-/g, '_')}_user`;
+    const suffix = crypto.randomBytes(3).toString('hex'); // 6-char unique suffix
+    const base = project.subdomain.replace(/-/g, '_');
+    const dbName = `cd_${base}_${suffix}`;
+    const dbUser = `cd_${base}_${suffix}_u`;
     const dbPassword = crypto.randomBytes(24).toString('base64url');
 
     const adminClient = new Client({ connectionString: config.provisionDb.adminUrl });

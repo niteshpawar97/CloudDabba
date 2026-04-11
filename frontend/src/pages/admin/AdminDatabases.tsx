@@ -1,17 +1,45 @@
 import { useState, useEffect } from 'react';
-import { getDatabases } from '../../api/admin';
+import { getDatabases, adminDeletePostgres, adminDeleteRedis } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
-import { Database } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { useToast } from '../../components/ui/Toast';
+import { Database, Trash2 } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminDatabases() {
   usePageTitle('Admin - Databases');
+  const toast = useToast();
   const [databases, setDatabases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const reload = () => getDatabases().then(setDatabases).catch(() => {});
 
   useEffect(() => {
-    getDatabases().then(setDatabases).catch(() => {}).finally(() => setLoading(false));
+    reload().finally(() => setLoading(false));
   }, []);
+
+  const handleDeletePg = async (projectId: string, dbName: string) => {
+    if (!confirm(`Delete PostgreSQL database "${dbName}"? This is permanent.`)) return;
+    setDeleting(`pg-${projectId}`);
+    try {
+      await adminDeletePostgres(projectId);
+      toast.success(`PostgreSQL "${dbName}" deleted`);
+      await reload();
+    } catch { toast.error('Failed to delete'); }
+    setDeleting(null);
+  };
+
+  const handleDeleteRedis = async (projectId: string, dbNum: number) => {
+    if (!confirm(`Remove Redis db/${dbNum}?`)) return;
+    setDeleting(`redis-${projectId}`);
+    try {
+      await adminDeleteRedis(projectId);
+      toast.success(`Redis db/${dbNum} removed`);
+      await reload();
+    } catch { toast.error('Failed to delete'); }
+    setDeleting(null);
+  };
 
   if (loading) return <Spinner size="lg" />;
 
@@ -54,9 +82,18 @@ export function AdminDatabases() {
                   </td>
                   <td className="px-4 py-3">
                     {db.postgres ? (
-                      <div>
-                        <span className="text-green-400 text-xs font-mono">{db.postgres.dbName}</span>
-                        <div className="text-[10px] text-slate-500">{db.postgres.dbUser}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <span className="text-green-400 text-xs font-mono">{db.postgres.dbName}</span>
+                          <div className="text-[10px] text-slate-500">{db.postgres.dbUser}</div>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePg(db.projectId, db.postgres.dbName)}
+                          disabled={deleting === `pg-${db.projectId}`}
+                          className="text-slate-600 hover:text-red-400 transition-colors ml-auto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     ) : (
                       <span className="text-slate-600">-</span>
@@ -64,7 +101,16 @@ export function AdminDatabases() {
                   </td>
                   <td className="px-4 py-3">
                     {db.redis ? (
-                      <span className="text-red-400 text-xs font-mono">db/{db.redis.dbNumber}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400 text-xs font-mono">db/{db.redis.dbNumber}</span>
+                        <button
+                          onClick={() => handleDeleteRedis(db.projectId, db.redis.dbNumber)}
+                          disabled={deleting === `redis-${db.projectId}`}
+                          className="text-slate-600 hover:text-red-400 transition-colors ml-auto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-slate-600">-</span>
                     )}
