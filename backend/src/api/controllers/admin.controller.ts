@@ -395,6 +395,19 @@ export class AdminController {
     }
   }
 
+  // Admin: force delete a project's mariadb
+  static async adminDeleteMariadb(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const project = await prisma.project.findUnique({ where: { id: req.params.id as string } });
+      if (!project) throw new AppError('Project not found', 404);
+      await DatabaseProvisionService.dropMariadb(project as any);
+      await prisma.project.update({ where: { id: req.params.id as string }, data: { mariadbEnabled: false, mariadbName: null, mariadbUser: null, mariadbPasswordEnc: null } as any });
+      sendSuccess(res, null, 'MariaDB database deleted');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Admin: force delete a project's redis
   static async adminDeleteRedis(req: AuthRequest, res: Response, next: NextFunction) {
     try {

@@ -62,6 +62,10 @@ model Project {
   dbPasswordEnc   String?     @map("db_password_enc") @db.Text
   redisEnabled    Boolean     @default(false) @map("redis_enabled")
   redisDbNumber   Int?        @map("redis_db_number")
+  mariadbEnabled  Boolean     @default(false) @map("mariadb_enabled")
+  mariadbName     String?     @map("mariadb_name") @db.VarChar(63)
+  mariadbUser     String?     @map("mariadb_user") @db.VarChar(63)
+  mariadbPasswordEnc String?  @map("mariadb_password_enc") @db.Text
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)

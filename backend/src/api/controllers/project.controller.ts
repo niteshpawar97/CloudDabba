@@ -59,6 +59,9 @@ export class ProjectController {
       if (projData && (projData as any).dbEnabled) {
         await DatabaseProvisionService.dropProjectDatabase(projData as any).catch(() => {});
       }
+      if (projData && (projData as any).mariadbEnabled) {
+        await DatabaseProvisionService.dropMariadb(projData as any).catch(() => {});
+      }
 
       const project = await ProjectService.delete(req.params.id as string, req.user!.id);
       await NginxService.removeConfig(project.subdomain).catch(() => {});

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars, getDomainStatus, setCustomDomain, verifyCustomDomain, removeCustomDomain } from '../api/projects';
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
-import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, testDbConnection } from '../api/database';
+import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, enableMariadb, disableMariadb, testDbConnection } from '../api/database';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
@@ -62,7 +62,7 @@ export function ProjectDetail() {
 
   // Database provisioning
   const [dbStatus, setDbStatus] = useState<any>(null);
-  const [dbLoading, setDbLoading] = useState<{ pg?: boolean; redis?: boolean }>({});
+  const [dbLoading, setDbLoading] = useState<{ pg?: boolean; redis?: boolean; mariadb?: boolean }>({});
   const [showDbUrl, setShowDbUrl] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
   const [dbTestResult, setDbTestResult] = useState<any>(null);
@@ -499,19 +499,17 @@ export function ProjectDetail() {
       <Card>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled ? 'bg-green-500/10' : 'bg-white/5'}`}>
-              <Database className={`h-5 w-5 ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled ? 'text-green-400' : 'text-slate-500'}`} />
+            <div className={`p-2 rounded-lg ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled || dbStatus?.mariadb?.enabled ? 'bg-green-500/10' : 'bg-white/5'}`}>
+              <Database className={`h-5 w-5 ${dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled || dbStatus?.mariadb?.enabled ? 'text-green-400' : 'text-slate-500'}`} />
             </div>
             <div>
               <div className="text-sm font-semibold text-white">Databases</div>
               <div className="text-xs text-slate-500">
-                {dbStatus?.postgres?.enabled && dbStatus?.redis?.enabled ? 'PostgreSQL + Redis enabled' :
-                 dbStatus?.postgres?.enabled ? 'PostgreSQL enabled' :
-                 dbStatus?.redis?.enabled ? 'Redis enabled' : 'No databases provisioned'}
+                {[dbStatus?.postgres?.enabled && 'PostgreSQL', dbStatus?.mariadb?.enabled && 'MariaDB', dbStatus?.redis?.enabled && 'Redis'].filter(Boolean).join(' + ') || 'No databases provisioned'}
               </div>
             </div>
           </div>
-          {(dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled) && (
+          {(dbStatus?.postgres?.enabled || dbStatus?.mariadb?.enabled || dbStatus?.redis?.enabled) && (
             <Button size="sm" variant="secondary" loading={dbTesting} onClick={async () => {
               if (!projectId) return;
               setDbTesting(true);
@@ -532,6 +530,11 @@ export function ProjectDetail() {
             {dbTestResult.postgres && (
               <div className={`text-xs px-3 py-2 rounded-lg ${dbTestResult.postgres.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                 PostgreSQL: {dbTestResult.postgres.ok ? 'Connected' : `Failed — ${dbTestResult.postgres.error}`}
+              </div>
+            )}
+            {dbTestResult.mariadb && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${dbTestResult.mariadb.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                MariaDB: {dbTestResult.mariadb.ok ? 'Connected' : `Failed — ${dbTestResult.mariadb.error}`}
               </div>
             )}
             {dbTestResult.redis && (
@@ -592,6 +595,59 @@ export function ProjectDetail() {
                   </button>
                 </div>
                 <div className="text-[10px] text-slate-600 mt-1">Auto-injected as DATABASE_URL on deploy</div>
+              </div>
+            )}
+          </div>
+
+          {/* MariaDB */}
+          <div className="bg-[#0a0e14] rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${dbStatus?.mariadb?.enabled ? 'bg-green-400' : 'bg-slate-600'}`} />
+                <span className="text-sm font-medium text-white">MariaDB</span>
+              </div>
+              <Button
+                size="sm"
+                variant={dbStatus?.mariadb?.enabled ? 'danger' : 'primary'}
+                loading={dbLoading.mariadb}
+                onClick={async () => {
+                  if (!projectId) return;
+                  setDbLoading((s) => ({ ...s, mariadb: true }));
+                  try {
+                    if (dbStatus?.mariadb?.enabled) {
+                      if (!confirm('This will permanently delete the MariaDB database and all data. Continue?')) { setDbLoading((s) => ({ ...s, mariadb: false })); return; }
+                      await disableMariadb(projectId);
+                      toast.success('MariaDB removed');
+                    } else {
+                      await enableMariadb(projectId);
+                      toast.success('MariaDB created');
+                    }
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || 'Failed');
+                  }
+                  const updated = await getDatabaseStatus(projectId).catch(() => dbStatus);
+                  setDbStatus(updated);
+                  setDbLoading((s) => ({ ...s, mariadb: false }));
+                }}
+              >
+                {dbStatus?.mariadb?.enabled ? 'Disable' : 'Enable'}
+              </Button>
+            </div>
+            {dbStatus?.mariadb?.enabled && dbStatus.mariadb.mariadbUrl && (
+              <div className="mt-2">
+                <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">MYSQL_URL</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs bg-black/30 rounded px-3 py-2 text-amber-400 font-mono break-all">
+                    {showDbUrl ? dbStatus.mariadb.mariadbUrl : dbStatus.mariadb.mariadbUrl.replace(/\/\/.*@/, '//****:****@')}
+                  </code>
+                  <button onClick={() => setShowDbUrl(!showDbUrl)} className="text-slate-500 hover:text-white shrink-0">
+                    {showDbUrl ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                  <button onClick={() => { navigator.clipboard.writeText(dbStatus.mariadb.mariadbUrl); toast.success('Copied!'); }} className="text-slate-500 hover:text-white shrink-0">
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="text-[10px] text-slate-600 mt-1">Auto-injected as MYSQL_URL on deploy</div>
               </div>
             )}
           </div>

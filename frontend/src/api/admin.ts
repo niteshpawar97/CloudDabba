@@ -54,5 +54,8 @@ export const getDatabases = () =>
 export const adminDeletePostgres = (projectId: string) =>
   client.delete(`/admin/databases/${projectId}/postgres`);
 
+export const adminDeleteMariadb = (projectId: string) =>
+  client.delete(`/admin/databases/${projectId}/mariadb`);
+
 export const adminDeleteRedis = (projectId: string) =>
   client.delete(`/admin/databases/${projectId}/redis`);

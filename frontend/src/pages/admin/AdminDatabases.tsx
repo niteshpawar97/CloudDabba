@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getDatabases, adminDeletePostgres, adminDeleteRedis } from '../../api/admin';
+import { getDatabases, adminDeletePostgres, adminDeleteMariadb, adminDeleteRedis } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
@@ -25,6 +25,17 @@ export function AdminDatabases() {
     try {
       await adminDeletePostgres(projectId);
       toast.success(`PostgreSQL "${dbName}" deleted`);
+      await reload();
+    } catch { toast.error('Failed to delete'); }
+    setDeleting(null);
+  };
+
+  const handleDeleteMariadb = async (projectId: string, dbName: string) => {
+    if (!confirm(`Delete MariaDB database "${dbName}"? This is permanent.`)) return;
+    setDeleting(`maria-${projectId}`);
+    try {
+      await adminDeleteMariadb(projectId);
+      toast.success(`MariaDB "${dbName}" deleted`);
       await reload();
     } catch { toast.error('Failed to delete'); }
     setDeleting(null);
@@ -66,6 +77,7 @@ export function AdminDatabases() {
                 <th className="px-4 py-3 font-medium">Project</th>
                 <th className="px-4 py-3 font-medium">Owner</th>
                 <th className="px-4 py-3 font-medium">PostgreSQL</th>
+                <th className="px-4 py-3 font-medium">MariaDB</th>
                 <th className="px-4 py-3 font-medium">Redis</th>
               </tr>
             </thead>
@@ -90,6 +102,25 @@ export function AdminDatabases() {
                         <button
                           onClick={() => handleDeletePg(db.projectId, db.postgres.dbName)}
                           disabled={deleting === `pg-${db.projectId}`}
+                          className="text-slate-600 hover:text-red-400 transition-colors ml-auto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-slate-600">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {db.mariadb ? (
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <span className="text-amber-400 text-xs font-mono">{db.mariadb.dbName}</span>
+                          <div className="text-[10px] text-slate-500">{db.mariadb.dbUser}</div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteMariadb(db.projectId, db.mariadb.dbName)}
+                          disabled={deleting === `maria-${db.projectId}`}
                           className="text-slate-600 hover:text-red-400 transition-colors ml-auto"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

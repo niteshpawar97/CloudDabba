@@ -15,5 +15,11 @@ export const enableRedis = (projectId: string) =>
 export const disableRedis = (projectId: string) =>
   client.delete(`/projects/${projectId}/database/redis`);
 
+export const enableMariadb = (projectId: string) =>
+  client.post<{ data: any }>(`/projects/${projectId}/database/mariadb`).then((r) => r.data.data);
+
+export const disableMariadb = (projectId: string) =>
+  client.delete(`/projects/${projectId}/database/mariadb`);
+
 export const testDbConnection = (projectId: string) =>
   client.post<{ data: any }>(`/projects/${projectId}/database/test`).then((r) => r.data.data);

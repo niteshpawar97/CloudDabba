@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Client } from 'pg';
+import mysql from 'mysql2/promise';
 import prisma from '../../database/connection';
 import { encrypt, decrypt } from './encryption.service';
 import { config } from '../../shared/config/app.config';
@@ -155,6 +156,88 @@ export class DatabaseProvisionService {
     return `redis://${auth}${host}:${port}/${dbNumber}`;
   }
 
+  // --- MariaDB ---
+
+  static async enableMariadb(projectId: string, userId: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+    if ((project as any).mariadbEnabled) throw new AppError('MariaDB already enabled', 409);
+
+    const suffix = crypto.randomBytes(3).toString('hex');
+    const base = project.subdomain.replace(/-/g, '_');
+    const dbName = `cd_${base}_${suffix}`;
+    const dbUser = `cd_${base}_${suffix}_u`;
+    const dbPassword = crypto.randomBytes(24).toString('base64url');
+
+    const conn = await mysql.createConnection({
+      host: config.mariadb.adminHost,
+      port: config.mariadb.adminPort,
+      user: config.mariadb.adminUser,
+      password: config.mariadb.adminPassword,
+    });
+    try {
+      await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+      await conn.query(`CREATE USER IF NOT EXISTS '${dbUser}'@'%' IDENTIFIED BY '${dbPassword}'`);
+      await conn.query(`ALTER USER '${dbUser}'@'%' IDENTIFIED BY '${dbPassword}'`);
+      await conn.query(`GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'%'`);
+      await conn.query('FLUSH PRIVILEGES');
+      logger.info(`Provisioned MariaDB: ${dbName} (user: ${dbUser})`);
+    } catch (err: any) {
+      throw new AppError(`Failed to provision MariaDB: ${err.message}`, 500);
+    } finally {
+      await conn.end();
+    }
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { mariadbEnabled: true, mariadbName: dbName, mariadbUser: dbUser, mariadbPasswordEnc: encrypt(dbPassword) } as any,
+    });
+
+    return {
+      mariadbEnabled: true,
+      mariadbName: dbName,
+      mariadbUser: dbUser,
+      mariadbUrl: this.buildMariadbUrl(dbUser, dbPassword, dbName),
+    };
+  }
+
+  static async disableMariadb(projectId: string, userId: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+
+    await this.dropMariadb(project as any);
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { mariadbEnabled: false, mariadbName: null, mariadbUser: null, mariadbPasswordEnc: null } as any,
+    });
+  }
+
+  static async dropMariadb(project: { mariadbName?: string | null; mariadbUser?: string | null }) {
+    if (!project.mariadbName && !project.mariadbUser) return;
+    const conn = await mysql.createConnection({
+      host: config.mariadb.adminHost,
+      port: config.mariadb.adminPort,
+      user: config.mariadb.adminUser,
+      password: config.mariadb.adminPassword,
+    });
+    try {
+      if (project.mariadbName) await conn.query(`DROP DATABASE IF EXISTS \`${project.mariadbName}\``);
+      if (project.mariadbUser) await conn.query(`DROP USER IF EXISTS '${project.mariadbUser}'@'%'`);
+      logger.info(`Dropped MariaDB: ${project.mariadbName}`);
+    } catch (err: any) {
+      logger.error(`Failed to drop MariaDB ${project.mariadbName}: ${err.message}`);
+    } finally {
+      await conn.end();
+    }
+  }
+
+  static buildMariadbUrl(user: string, password: string, dbName: string): string {
+    return `mysql://${user}:${password}@${config.mariadb.host}:${config.mariadb.port}/${dbName}`;
+  }
+
   // --- Test Connection ---
 
   static async testConnection(projectId: string, userId: string) {
@@ -163,7 +246,7 @@ export class DatabaseProvisionService {
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
 
     const p = project as any;
-    const results: { postgres?: { ok: boolean; error?: string }; redis?: { ok: boolean; error?: string } } = {};
+    const results: { postgres?: { ok: boolean; error?: string }; redis?: { ok: boolean; error?: string }; mariadb?: { ok: boolean; error?: string } } = {};
 
     // Test PostgreSQL
     if (p.dbEnabled && p.dbPasswordEnc && p.dbName && p.dbUser) {
@@ -194,6 +277,25 @@ export class DatabaseProvisionService {
       results.redis = redisOk ? { ok: true } : { ok: false, error: `Cannot reach ${config.redis.host}:${config.redis.port}` };
     }
 
+    // Test MariaDB
+    if (p.mariadbEnabled && p.mariadbPasswordEnc && p.mariadbName && p.mariadbUser) {
+      try {
+        const mConn = await mysql.createConnection({
+          host: config.mariadb.host,
+          port: config.mariadb.port,
+          user: p.mariadbUser,
+          password: decrypt(p.mariadbPasswordEnc),
+          database: p.mariadbName,
+          connectTimeout: 5000,
+        });
+        await mConn.query('SELECT 1');
+        await mConn.end();
+        results.mariadb = { ok: true };
+      } catch (err: any) {
+        results.mariadb = { ok: false, error: err.message };
+      }
+    }
+
     return results;
   }
 
@@ -219,12 +321,20 @@ export class DatabaseProvisionService {
         dbNumber: p.redisDbNumber ?? null,
         redisUrl: p.redisEnabled ? this.buildRedisUrl(p.redisDbNumber) : null,
       },
+      mariadb: {
+        enabled: p.mariadbEnabled || false,
+        dbName: p.mariadbName || null,
+        dbUser: p.mariadbUser || null,
+        mariadbUrl: p.mariadbEnabled && p.mariadbPasswordEnc
+          ? this.buildMariadbUrl(p.mariadbUser, decrypt(p.mariadbPasswordEnc), p.mariadbName)
+          : null,
+      },
     };
   }
 
   static async listAllDatabases() {
     const projects = await prisma.project.findMany({
-      where: { OR: [{ dbEnabled: true } as any, { redisEnabled: true } as any] },
+      where: { OR: [{ dbEnabled: true } as any, { redisEnabled: true } as any, { mariadbEnabled: true } as any] },
       include: { user: { select: { name: true, email: true } } },
     });
 
@@ -235,6 +345,7 @@ export class DatabaseProvisionService {
       owner: p.user.name,
       ownerEmail: p.user.email,
       postgres: p.dbEnabled ? { dbName: p.dbName, dbUser: p.dbUser } : null,
+      mariadb: p.mariadbEnabled ? { dbName: p.mariadbName, dbUser: p.mariadbUser } : null,
       redis: p.redisEnabled ? { dbNumber: p.redisDbNumber } : null,
     }));
   }

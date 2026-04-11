@@ -171,6 +171,12 @@ export class DeploymentService {
         envVars['REDIS_URL'] = DatabaseProvisionService.buildRedisUrl(proj.redisDbNumber);
         await LogService.createLog(deploymentId, 'SYSTEM', `Injected REDIS_URL (db: ${proj.redisDbNumber})`);
       }
+      if (proj.mariadbEnabled && proj.mariadbPasswordEnc && proj.mariadbName && proj.mariadbUser) {
+        const { decrypt: dec } = await import('./encryption.service');
+        const { DatabaseProvisionService: DbProv } = await import('./database-provision.service');
+        envVars['MYSQL_URL'] = DbProv.buildMariadbUrl(proj.mariadbUser, dec(proj.mariadbPasswordEnc), proj.mariadbName);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Injected MYSQL_URL (db: ${proj.mariadbName})`);
+      }
 
       const container = await DockerService.createAndStartContainer(
         imageTag,

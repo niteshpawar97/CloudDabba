@@ -49,6 +49,24 @@ export class DatabaseController {
     }
   }
 
+  static async enableMariadb(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await DatabaseProvisionService.enableMariadb(req.params.id as string, req.user!.id);
+      sendSuccess(res, result, 'MariaDB database created');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async disableMariadb(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await DatabaseProvisionService.disableMariadb(req.params.id as string, req.user!.id);
+      sendSuccess(res, null, 'MariaDB database removed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async testConnection(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await DatabaseProvisionService.testConnection(req.params.id as string, req.user!.id);

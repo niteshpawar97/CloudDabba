@@ -47,4 +47,12 @@ export const config = {
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || '',
   },
+  mariadb: {
+    adminHost: process.env.MARIADB_ADMIN_HOST || 'localhost',
+    adminPort: parseInt(process.env.MARIADB_ADMIN_PORT || '3306', 10),
+    adminUser: process.env.MARIADB_ADMIN_USER || 'root',
+    adminPassword: process.env.MARIADB_ADMIN_PASSWORD || '',
+    host: process.env.MARIADB_HOST || 'localhost',
+    port: parseInt(process.env.MARIADB_PORT || '3306', 10),
+  },
 } as const;
