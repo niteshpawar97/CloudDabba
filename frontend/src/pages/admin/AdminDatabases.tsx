@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getDatabases, adminDeletePostgres, adminDeleteMariadb, adminDeleteRedis } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
-import { Button } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
 import { Database, Trash2 } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
