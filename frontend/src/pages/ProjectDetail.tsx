@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars, getDomainStatus, setCustomDomain, verifyCustomDomain, removeCustomDomain } from '../api/projects';
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
-import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis } from '../api/database';
+import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, testDbConnection } from '../api/database';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
@@ -64,6 +64,8 @@ export function ProjectDetail() {
   const [dbStatus, setDbStatus] = useState<any>(null);
   const [dbLoading, setDbLoading] = useState<{ pg?: boolean; redis?: boolean }>({});
   const [showDbUrl, setShowDbUrl] = useState(false);
+  const [dbTesting, setDbTesting] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState<any>(null);
 
   // Env vars
   const [showEnv, setShowEnv] = useState(false);
@@ -509,7 +511,36 @@ export function ProjectDetail() {
               </div>
             </div>
           </div>
+          {(dbStatus?.postgres?.enabled || dbStatus?.redis?.enabled) && (
+            <Button size="sm" variant="secondary" loading={dbTesting} onClick={async () => {
+              if (!projectId) return;
+              setDbTesting(true);
+              setDbTestResult(null);
+              try {
+                const result = await testDbConnection(projectId);
+                setDbTestResult(result);
+              } catch { setDbTestResult({ error: 'Test failed' }); }
+              setDbTesting(false);
+            }}>
+              Test Connection
+            </Button>
+          )}
         </div>
+
+        {dbTestResult && (
+          <div className="mb-4 space-y-1">
+            {dbTestResult.postgres && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${dbTestResult.postgres.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                PostgreSQL: {dbTestResult.postgres.ok ? 'Connected' : `Failed — ${dbTestResult.postgres.error}`}
+              </div>
+            )}
+            {dbTestResult.redis && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${dbTestResult.redis.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                Redis: {dbTestResult.redis.ok ? 'Connected' : `Failed — ${dbTestResult.redis.error}`}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           {/* PostgreSQL */}

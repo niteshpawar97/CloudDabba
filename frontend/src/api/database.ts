@@ -14,3 +14,6 @@ export const enableRedis = (projectId: string) =>
 
 export const disableRedis = (projectId: string) =>
   client.delete(`/projects/${projectId}/database/redis`);
+
+export const testDbConnection = (projectId: string) =>
+  client.post<{ data: any }>(`/projects/${projectId}/database/test`).then((r) => r.data.data);

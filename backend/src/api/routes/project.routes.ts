@@ -44,5 +44,6 @@ router.post('/:id/database/postgres', authenticate, DatabaseController.enablePos
 router.delete('/:id/database/postgres', authenticate, DatabaseController.disablePostgres);
 router.post('/:id/database/redis', authenticate, DatabaseController.enableRedis);
 router.delete('/:id/database/redis', authenticate, DatabaseController.disableRedis);
+router.post('/:id/database/test', authenticate, DatabaseController.testConnection);
 
 export default router;

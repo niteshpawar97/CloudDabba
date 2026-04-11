@@ -22,14 +22,25 @@ export class DatabaseProvisionService {
     const adminClient = new Client({ connectionString: config.provisionDb.adminUrl });
     try {
       await adminClient.connect();
-      await adminClient.query(`CREATE USER "${dbUser}" WITH PASSWORD '${dbPassword}'`);
-      await adminClient.query(`CREATE DATABASE "${dbName}" OWNER "${dbUser}"`);
+      // Create or update user
+      try {
+        await adminClient.query(`CREATE USER "${dbUser}" WITH PASSWORD '${dbPassword}'`);
+      } catch (err: any) {
+        if (err.code === '42710') {
+          // User exists — update password
+          await adminClient.query(`ALTER USER "${dbUser}" WITH PASSWORD '${dbPassword}'`);
+        } else throw err;
+      }
+      // Create database if not exists
+      try {
+        await adminClient.query(`CREATE DATABASE "${dbName}" OWNER "${dbUser}"`);
+      } catch (err: any) {
+        if (err.code !== '42P04') throw err; // 42P04 = already exists
+      }
       await adminClient.query(`GRANT ALL PRIVILEGES ON DATABASE "${dbName}" TO "${dbUser}"`);
       logger.info(`Provisioned PostgreSQL: ${dbName} (user: ${dbUser})`);
     } catch (err: any) {
-      if (err.code !== '42710' && err.code !== '42P04') {
-        throw new AppError(`Failed to provision database: ${err.message}`, 500);
-      }
+      throw new AppError(`Failed to provision database: ${err.message}`, 500);
     } finally {
       await adminClient.end();
     }
@@ -139,6 +150,48 @@ export class DatabaseProvisionService {
     const { host, port, password } = config.redis;
     const auth = password ? `:${password}@` : '';
     return `redis://${auth}${host}:${port}/${dbNumber}`;
+  }
+
+  // --- Test Connection ---
+
+  static async testConnection(projectId: string, userId: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+
+    const p = project as any;
+    const results: { postgres?: { ok: boolean; error?: string }; redis?: { ok: boolean; error?: string } } = {};
+
+    // Test PostgreSQL
+    if (p.dbEnabled && p.dbPasswordEnc && p.dbName && p.dbUser) {
+      const dbPassword = decrypt(p.dbPasswordEnc);
+      const connStr = this.buildDatabaseUrl(p.dbUser, dbPassword, p.dbName);
+      const testClient = new Client({ connectionString: connStr, connectionTimeoutMillis: 5000 });
+      try {
+        await testClient.connect();
+        await testClient.query('SELECT 1');
+        results.postgres = { ok: true };
+      } catch (err: any) {
+        results.postgres = { ok: false, error: err.message };
+      } finally {
+        await testClient.end().catch(() => {});
+      }
+    }
+
+    // Test Redis
+    if (p.redisEnabled && p.redisDbNumber != null) {
+      const net = await import('net');
+      const redisOk = await new Promise<boolean>((resolve) => {
+        const socket = new net.default.Socket();
+        socket.setTimeout(3000);
+        socket.connect(config.redis.port, config.redis.host, () => { socket.destroy(); resolve(true); });
+        socket.on('error', () => { socket.destroy(); resolve(false); });
+        socket.on('timeout', () => { socket.destroy(); resolve(false); });
+      });
+      results.redis = redisOk ? { ok: true } : { ok: false, error: `Cannot reach ${config.redis.host}:${config.redis.port}` };
+    }
+
+    return results;
   }
 
   // --- Status & Admin ---

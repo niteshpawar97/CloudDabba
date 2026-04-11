@@ -48,4 +48,13 @@ export class DatabaseController {
       next(error);
     }
   }
+
+  static async testConnection(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await DatabaseProvisionService.testConnection(req.params.id as string, req.user!.id);
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
