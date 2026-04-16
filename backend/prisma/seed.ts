@@ -4,6 +4,15 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  // Skip seed if setup wizard already completed
+  try {
+    const settings = await (prisma as any).platformSettings.findUnique({ where: { id: 'singleton' } });
+    if (settings?.setupCompleted) {
+      console.log('Setup already completed — skipping seed.');
+      return;
+    }
+  } catch {}
+
   console.log('Seeding database...');
 
   const adminPassword = await bcrypt.hash('admin@123', 12);

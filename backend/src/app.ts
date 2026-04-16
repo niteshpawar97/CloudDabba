@@ -10,6 +10,7 @@ import { generalLimiter } from './core/middleware/rate-limit.middleware';
 import { subdomainProxy } from './core/middleware/subdomain-proxy.middleware';
 import routes from './api/routes';
 import webhookRoutes from './api/routes/webhook.routes';
+import { setupGuard } from './core/middleware/setup-guard.middleware';
 
 const app = express();
 
@@ -37,6 +38,9 @@ if (config.app.nodeEnv !== 'test') {
 
 // Rate limiting
 app.use(generalLimiter);
+
+// Setup guard — blocks API until first-time setup is complete
+app.use(setupGuard);
 
 // Webhook routes (no version prefix — URLs must be stable)
 app.use('/api/webhook', webhookRoutes);

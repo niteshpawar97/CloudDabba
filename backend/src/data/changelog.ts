@@ -10,6 +10,32 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.5.0',
+    date: '2026-04-16',
+    changes: [
+      {
+        type: 'feature',
+        title: 'One-click install script',
+        description: 'install.sh auto-installs Docker, Node, NGINX, PM2, generates secrets, configures SSL, and starts the platform.',
+      },
+      {
+        type: 'feature',
+        title: 'Docker single-command setup',
+        description: 'Full platform via docker-compose.prod.yml — PostgreSQL, Redis, and CloudDabba in one command.',
+      },
+      {
+        type: 'feature',
+        title: 'First-time setup wizard',
+        description: 'Browser-based wizard for domain, admin email, and password configuration. Blocks all other routes until setup is complete.',
+      },
+      {
+        type: 'improvement',
+        title: 'Enhanced health check',
+        description: 'Health endpoint now checks database, Docker, and setup status with detailed per-service results.',
+      },
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-04-11',
     changes: [

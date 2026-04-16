@@ -1,8 +1,11 @@
+const path = require('path');
+const appDir = path.resolve(__dirname, 'backend');
+
 module.exports = {
   apps: [
     {
       name: 'clouddabba-api',
-      cwd: '/home/learn-nodejs/htdocs/clouddabba/backend',
+      cwd: appDir,
       script: 'dist/server.js',
       instances: 1,
       autorestart: true,

@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clouddabba-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-clouddabba}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-clouddabba}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-clouddabba}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clouddabba-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clouddabba-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 6050
+      API_VERSION: v1
+      DATABASE_URL: postgresql://${DB_USER:-clouddabba}:${DB_PASSWORD:-changeme}@postgres:5432/${DB_NAME:-clouddabba}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-string}
+      JWT_EXPIRE: 7d
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
+      DOCKER_SOCKET: /var/run/docker.sock
+      NGINX_SITES_PATH: /etc/nginx/sites-enabled
+      NGINX_RELOAD_CMD: sudo nginx -s reload
+      PORT_RANGE_START: 10000
+      PORT_RANGE_END: 20000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:6050}
+      LOG_LEVEL: info
+      PROVISION_DB_ADMIN_URL: postgresql://${DB_USER:-clouddabba}:${DB_PASSWORD:-changeme}@postgres:5432/postgres
+      PROVISION_DB_HOST: ${PROVISION_DB_HOST:-172.17.0.1}
+      PROVISION_DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+    ports:
+      - "${APP_PORT:-6050}:6050"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - internal
+      - clouddabba
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6050/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  internal:
+    driver: bridge
+  clouddabba:
+    name: clouddabba
+    driver: bridge

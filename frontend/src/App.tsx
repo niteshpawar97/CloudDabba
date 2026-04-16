@@ -24,6 +24,7 @@ import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminImages } from './pages/admin/AdminImages';
 import { AdminChangelog } from './pages/admin/AdminChangelog';
 import { AdminDatabases } from './pages/admin/AdminDatabases';
+import { SetupWizard } from './pages/SetupWizard';
 
 function App() {
   return (
@@ -31,6 +32,9 @@ function App() {
       <ToastProvider>
       <BrowserRouter>
         <Routes>
+          {/* Setup wizard (first-time only) */}
+          <Route path="/setup" element={<SetupWizard />} />
+
           {/* Public landing page */}
           <Route path="/" element={<LandingPage />} />
 

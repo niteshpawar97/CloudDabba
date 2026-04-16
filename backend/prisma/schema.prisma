@@ -122,3 +122,16 @@ model Log {
   @@index([deploymentId, timestamp])
   @@map("logs")
 }
+
+model PlatformSettings {
+  id             String    @id @default("singleton")
+  setupCompleted Boolean   @default(false) @map("setup_completed")
+  baseDomain     String?   @map("base_domain") @db.VarChar(255)
+  adminEmail     String?   @map("admin_email") @db.VarChar(255)
+  sslEnabled     Boolean   @default(false) @map("ssl_enabled")
+  installedAt    DateTime? @map("installed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}

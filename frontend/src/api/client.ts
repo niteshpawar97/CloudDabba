@@ -22,6 +22,11 @@ client.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    if (error.response?.status === 503 && error.response?.data?.code === 'SETUP_REQUIRED') {
+      if (!window.location.pathname.startsWith('/setup')) {
+        window.location.href = '/setup';
+      }
+    }
     return Promise.reject(error);
   }
 );
