@@ -17,12 +17,27 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+GRAY='\033[0;90m'
 NC='\033[0m'
 
 info()    { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"; }
-success() { echo -e "${GREEN}[OK]${NC} $1" | tee -a "$LOG_FILE"; }
+success() { echo -e "${GREEN}[  OK]${NC} $1" | tee -a "$LOG_FILE"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"; }
-error()   { echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOG_FILE"; }
+error()   { echo -e "${RED}[ ERR]${NC} $1" | tee -a "$LOG_FILE"; }
+
+# Run a command with live output (dimmed) + log
+run() {
+  "$@" 2>&1 | while IFS= read -r line; do
+    echo -e "${GRAY}       $line${NC}"
+    echo "$line" >> "$LOG_FILE"
+  done
+  return "${PIPESTATUS[0]}"
+}
+
+# Run silently (only log, no screen output)
+run_quiet() {
+  "$@" >> "$LOG_FILE" 2>&1
+}
 
 rollback() {
   if [ ${#ROLLBACK_ACTIONS[@]} -gt 0 ]; then
@@ -63,35 +78,35 @@ detect_os() {
 install_if_missing() {
   local cmd="$1" pkg="$2"
   if command -v "$cmd" &>/dev/null; then
-    success "$cmd already installed ($(command -v "$cmd"))"
+    success "$cmd already installed"
   else
     info "Installing $pkg..."
-    sudo apt-get install -y "$pkg" >> "$LOG_FILE" 2>&1
+    run sudo apt-get install -y "$pkg"
     success "$pkg installed"
   fi
 }
 
 check_and_install_deps() {
-  info "Checking dependencies..."
-  sudo apt-get update -qq >> "$LOG_FILE" 2>&1
+  info "Updating package list..."
+  run sudo apt-get update -qq
 
   # Docker
   if ! command -v docker &>/dev/null; then
     info "Installing Docker..."
-    sudo apt-get install -y docker.io >> "$LOG_FILE" 2>&1
-    sudo systemctl enable docker >> "$LOG_FILE" 2>&1
-    sudo systemctl start docker >> "$LOG_FILE" 2>&1
+    run sudo apt-get install -y docker.io
+    run_quiet sudo systemctl enable docker
+    run_quiet sudo systemctl start docker
     sudo usermod -aG docker "$USER" 2>/dev/null || true
     success "Docker installed"
   else
-    success "Docker already installed"
+    success "Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
   fi
 
   # Node.js 22
   if ! command -v node &>/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 22 ]; then
     info "Installing Node.js 22..."
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - >> "$LOG_FILE" 2>&1
-    sudo apt-get install -y nodejs >> "$LOG_FILE" 2>&1
+    run bash -c "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+    run sudo apt-get install -y nodejs
     success "Node.js $(node -v) installed"
   else
     success "Node.js $(node -v) already installed"
@@ -103,7 +118,7 @@ check_and_install_deps() {
   # PM2
   if ! command -v pm2 &>/dev/null; then
     info "Installing PM2..."
-    sudo npm install -g pm2 >> "$LOG_FILE" 2>&1
+    run sudo npm install -g pm2
     success "PM2 installed"
   else
     success "PM2 already installed"
@@ -111,7 +126,11 @@ check_and_install_deps() {
 
   # Certbot
   install_if_missing certbot certbot
-  sudo apt-get install -y python3-certbot-nginx >> "$LOG_FILE" 2>&1 || true
+  run_quiet sudo apt-get install -y python3-certbot-nginx || true
+
+  echo ""
+  success "All dependencies ready!"
+  echo ""
 }
 
 # --- Server IP Detection ---
@@ -216,32 +235,28 @@ MARIADB_HOST=172.17.0.1
 MARIADB_PORT=3306
 EOF
 
-  # Update docker-compose with generated passwords
   export DB_PASSWORD REDIS_PASSWORD
   success "Environment file generated"
 }
 
 # --- Database Setup ---
 setup_databases() {
-  info "Starting PostgreSQL and Redis..."
+  info "Starting PostgreSQL and Redis containers..."
   cd "$INSTALL_DIR"
 
-  # Update docker-compose env
-  POSTGRES_PASSWORD="$DB_PASSWORD" docker compose up -d postgres redis >> "$LOG_FILE" 2>&1 || \
-  DB_PASSWORD="$DB_PASSWORD" REDIS_PASSWORD="$REDIS_PASSWORD" docker compose up -d >> "$LOG_FILE" 2>&1
+  POSTGRES_PASSWORD="$DB_PASSWORD" docker compose up -d postgres redis 2>&1 | tee -a "$LOG_FILE" || \
+  DB_PASSWORD="$DB_PASSWORD" REDIS_PASSWORD="$REDIS_PASSWORD" docker compose up -d 2>&1 | tee -a "$LOG_FILE"
 
   ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && docker compose down 2>/dev/null")
 
-  # Wait for PostgreSQL
-  info "Waiting for PostgreSQL..."
+  info "Waiting for PostgreSQL to be ready..."
   for i in $(seq 1 30); do
     if docker exec clouddabba-db pg_isready -U clouddabba &>/dev/null; then
       success "PostgreSQL ready"
-
-      # Update PostgreSQL password
       docker exec clouddabba-db psql -U clouddabba -c "ALTER USER clouddabba PASSWORD '${DB_PASSWORD}';" >> "$LOG_FILE" 2>&1 || true
       return
     fi
+    echo -e "${GRAY}       Waiting... ($i/30)${NC}"
     sleep 2
   done
   error "PostgreSQL did not start in time"
@@ -250,36 +265,44 @@ setup_databases() {
 
 # --- Build Application ---
 build_application() {
-  info "Building backend..."
+  info "Installing backend dependencies..."
   cd "$INSTALL_DIR/backend"
-  npm ci --production=false >> "$LOG_FILE" 2>&1
-  npx prisma generate >> "$LOG_FILE" 2>&1
-  npx prisma db push >> "$LOG_FILE" 2>&1
-  npm run build >> "$LOG_FILE" 2>&1
+  run npm ci --production=false
+
+  info "Generating Prisma client..."
+  run npx prisma generate
+
+  info "Pushing database schema..."
+  run npx prisma db push
+
+  info "Building backend (TypeScript)..."
+  run npm run build
 
   if [ ! -f "$INSTALL_DIR/backend/dist/server.js" ]; then
-    error "Backend build failed — dist/server.js not found"
+    error "Backend build failed - dist/server.js not found"
     exit 1
   fi
-  success "Backend built"
+  success "Backend built successfully"
 
-  info "Building frontend..."
+  info "Installing frontend dependencies..."
   cd "$INSTALL_DIR/frontend"
-  npm ci >> "$LOG_FILE" 2>&1
-  npm run build >> "$LOG_FILE" 2>&1
+  run npm ci
+
+  info "Building frontend (Vite)..."
+  run npm run build
 
   if [ ! -f "$INSTALL_DIR/frontend/dist/index.html" ]; then
-    error "Frontend build failed — dist/index.html not found"
+    error "Frontend build failed - dist/index.html not found"
     exit 1
   fi
-  success "Frontend built"
+  success "Frontend built successfully"
 }
 
 # --- Seed Database ---
 seed_database() {
-  info "Seeding database..."
+  info "Seeding database (creating admin user)..."
   cd "$INSTALL_DIR/backend"
-  npx prisma db seed >> "$LOG_FILE" 2>&1 || true
+  run npx prisma db seed || true
   success "Database seeded"
 }
 
@@ -300,7 +323,7 @@ setup_nginx() {
       sudo systemctl reload nginx >> "$LOG_FILE" 2>&1
       success "NGINX configured for ${DOMAIN}"
     else
-      error "NGINX config test failed"
+      error "NGINX config test failed — check $LOG_FILE"
       exit 1
     fi
   else
@@ -311,7 +334,7 @@ setup_nginx() {
 # --- SSL Setup ---
 setup_ssl() {
   if [ "$DOMAIN" = "$SERVER_IP" ]; then
-    warn "Using IP address — SSL skipped (requires a domain)"
+    warn "Using IP address - SSL skipped (requires a domain name)"
     return
   fi
 
@@ -319,14 +342,14 @@ setup_ssl() {
   RESOLVED_IP=$(dig +short "$DOMAIN" 2>/dev/null | head -1)
 
   if [ "$RESOLVED_IP" = "$SERVER_IP" ]; then
-    info "DNS verified! Setting up SSL..."
-    if sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" >> "$LOG_FILE" 2>&1; then
+    info "DNS verified! Setting up SSL certificate..."
+    if sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" 2>&1 | tee -a "$LOG_FILE"; then
       success "SSL certificate installed"
     else
       warn "SSL setup failed. Run later: sudo certbot --nginx -d ${DOMAIN}"
     fi
   else
-    warn "DNS not pointing to this server yet (expected: ${SERVER_IP}, got: ${RESOLVED_IP:-none})"
+    warn "DNS not pointing to this server (expected: ${SERVER_IP}, got: ${RESOLVED_IP:-none})"
     warn "After updating DNS, run: sudo certbot --nginx -d ${DOMAIN}"
   fi
 }
@@ -336,12 +359,12 @@ setup_pm2() {
   info "Starting CloudDabba with PM2..."
   cd "$INSTALL_DIR"
   pm2 delete clouddabba-api 2>/dev/null || true
-  pm2 start ecosystem.config.js >> "$LOG_FILE" 2>&1
+  run pm2 start ecosystem.config.js
   ROLLBACK_ACTIONS+=("pm2 delete clouddabba-api 2>/dev/null")
 
-  pm2 save >> "$LOG_FILE" 2>&1
+  run_quiet pm2 save
   pm2 startup 2>&1 | grep "sudo" | bash >> "$LOG_FILE" 2>&1 || true
-  success "PM2 started + auto-start configured"
+  success "PM2 started + auto-start on reboot configured"
 }
 
 # --- Verify Installation ---
@@ -354,22 +377,23 @@ verify_installation() {
       success "Health check passed!"
       return
     fi
+    echo -e "${GRAY}       Waiting for server... ($i/10)${NC}"
     sleep 2
   done
 
-  warn "Health check did not pass — server may still be starting"
+  warn "Health check did not pass - server may still be starting"
   warn "Check logs: pm2 logs clouddabba-api"
 }
 
 # --- UFW Rules ---
 setup_firewall() {
-  if command -v ufw &>/dev/null && sudo ufw status | grep -q "active"; then
-    info "Configuring firewall..."
+  if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
+    info "Configuring firewall rules..."
     sudo ufw allow 80/tcp >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow 443/tcp >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow from 172.17.0.0/16 to any port 5432 >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow from 172.17.0.0/16 to any port 6379 >> "$LOG_FILE" 2>&1 || true
-    success "Firewall rules added"
+    success "Firewall rules added (80, 443, Docker subnet)"
   fi
 }
 
@@ -383,18 +407,19 @@ print_summary() {
   fi
 
   echo ""
-  echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}║      CloudDabba Installed Successfully!   ║${NC}"
-  echo -e "${GREEN}╚═══════════════════════════════════════════╝${NC}"
+  echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}║       CloudDabba Installed Successfully!       ║${NC}"
+  echo -e "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
   echo ""
-  echo -e "  ${CYAN}Platform URL:${NC}  ${URL}"
-  echo -e "  ${CYAN}Setup Wizard:${NC}  ${URL}/setup"
-  echo -e "  ${CYAN}Admin Email:${NC}   ${ADMIN_EMAIL}"
+  echo -e "  ${CYAN}Platform URL:${NC}   ${URL}"
+  echo -e "  ${CYAN}Setup Wizard:${NC}   ${URL}/setup"
+  echo -e "  ${CYAN}Admin Email:${NC}    ${ADMIN_EMAIL}"
   echo ""
-  echo -e "  ${YELLOW}Next Step:${NC} Open the URL above to complete setup via the wizard."
+  echo -e "  ${YELLOW}Next Step:${NC} Open the Setup Wizard URL above in your browser"
+  echo -e "             to complete the platform configuration."
   echo ""
-  echo -e "  ${BLUE}Logs:${NC}   $LOG_FILE"
-  echo -e "  ${BLUE}PM2:${NC}    pm2 logs clouddabba-api"
+  echo -e "  ${BLUE}Install Log:${NC}  $LOG_FILE"
+  echo -e "  ${BLUE}App Logs:${NC}     pm2 logs clouddabba-api"
   echo ""
 }
 
