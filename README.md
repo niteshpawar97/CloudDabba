@@ -2,17 +2,57 @@
 
 Deploy GitHub repositories as Docker containers with auto-generated subdomains, custom domains, and auto-SSL. Like Vercel/Render, but on your own server.
 
+---
+
+## Quick Install
+
+### Option 1: One-Click Install (Ubuntu/Debian VPS)
+
+```bash
+git clone https://github.com/niteshpawar97/CloudDabba.git
+cd CloudDabba
+chmod +x install.sh
+./install.sh
+```
+
+The script installs all dependencies, generates secrets, configures NGINX + SSL, and starts the platform. Open the URL shown at the end to complete setup via the browser wizard.
+
+### Option 2: Docker (Any Linux with Docker)
+
+```bash
+git clone https://github.com/niteshpawar97/CloudDabba.git
+cd CloudDabba
+cp .env.docker .env
+
+# Generate secrets (replace the CHANGE_ME values in .env)
+sed -i "s/CHANGE_ME_JWT_SECRET/$(openssl rand -base64 48)/g" .env
+sed -i "s/CHANGE_ME_DB_PASSWORD/$(openssl rand -base64 24 | tr -d '/+=')/g" .env
+sed -i "s/CHANGE_ME_REDIS_PASSWORD/$(openssl rand -base64 24 | tr -d '/+=')/g" .env
+sed -i "s/CHANGE_ME_64_CHAR_HEX_STRING/$(openssl rand -hex 32)/g" .env
+
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Open `http://YOUR_IP:6050/setup` to complete setup via the wizard.
+
+---
+
 ## Features
 
+- **One-Click Install** - install.sh sets up everything automatically on Ubuntu/Debian
+- **Setup Wizard** - Browser-based first-time configuration (domain, admin account)
 - **Smart Detection** - Auto-detects React, Vue, Angular, Svelte, Next.js, Express, NestJS, Fastify, Nuxt, SvelteKit + more
+- **Subdirectory Detection** - Finds apps inside subdirectories (e.g., /notes-app/package.json)
 - **Any Repo Structure** - Monorepo, root-backend, separate dirs, single app - all handled automatically
 - **TypeScript Native** - Auto-transpiles TypeScript before deployment
 - **Docker Native** - Generates optimized Dockerfiles per project type
+- **Database Provisioning** - Per-project PostgreSQL, MariaDB, and Redis with auto-injected credentials
 - **Auto-SSL** - Let's Encrypt certificates issued automatically on custom domain verification
-- **Custom Domains** - Add your own domain with DNS verification and auto-SSL
+- **Custom Domains** - Add your own domain with DNS verification, subdomain auto-redirect
 - **Real-time Logs** - Build + runtime container logs via WebSocket
 - **Auto-Deploy** - GitHub webhook integration for deploy on push
-- **Admin Panel** - Platform management for the owner
+- **Admin Panel** - Users, projects, containers, images, databases, changelog
+- **Health Monitoring** - Detailed health check endpoint with per-service status
 
 ---
 
@@ -23,8 +63,9 @@ Deploy GitHub repositories as Docker containers with auto-generated subdomains, 
 | Backend | Node.js, Express, TypeScript, Prisma, PostgreSQL |
 | Frontend | React, Vite, Tailwind CSS, TypeScript |
 | Infrastructure | Docker (dockerode), NGINX, WebSocket (ws), Let's Encrypt |
+| Databases | PostgreSQL, MariaDB, Redis (per-project provisioning) |
 | Auth | JWT + bcrypt, AES-256 PAT encryption |
-| CI/CD | GitHub Actions + SSH deploy |
+| Deploy | PM2, GitHub Actions CI/CD, Docker Compose |
 
 ---
 
@@ -32,7 +73,7 @@ Deploy GitHub repositories as Docker containers with auto-generated subdomains, 
 
 ### Prerequisites
 
-- Node.js v18+
+- Node.js v22+
 - Docker Desktop
 - Git
 
@@ -66,7 +107,7 @@ npm run dev            # Runs on http://localhost:5173
 Open http://localhost:5173 and login:
 ```
 Email:    admin@clouddabba.dev
-Password: admin123
+Password: admin@123
 ```
 
 ---
@@ -312,6 +353,38 @@ Standard:       Root Backend:       Monorepo:
 
 ---
 
+## Setup Wizard
+
+On first run, CloudDabba shows a browser-based setup wizard at `/setup`:
+
+1. **Welcome** - Platform introduction
+2. **Domain & Email** - Configure base domain and admin email
+3. **Admin Account** - Set admin name and password
+4. **Complete** - Platform is ready, redirects to dashboard
+
+The setup wizard blocks all other routes until completed. After setup, `/setup` redirects to the dashboard.
+
+---
+
+## Database Provisioning
+
+Each project can enable managed databases from the Project Detail page:
+
+| Database | Env Var Injected | Description |
+|----------|-----------------|-------------|
+| PostgreSQL | `DATABASE_URL` | Dedicated database + user per project |
+| MariaDB | `MYSQL_URL` | Dedicated database + user per project |
+| Redis | `REDIS_URL` | Dedicated database number (1-15) |
+
+- Click **Enable** on any database in the Databases card
+- Connection URL is auto-generated with random credentials
+- URL is auto-injected into containers on every deploy
+- **Test Connection** button verifies connectivity
+- Databases are cleaned up when project is deleted
+- Admin panel shows all provisioned databases at `/admin/databases`
+
+---
+
 ## Custom Domains
 
 ### Setup Steps
@@ -364,6 +437,10 @@ Standard:       Root Backend:       Monorepo:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/v1/health` | Detailed health check (DB, Docker, setup) |
+| GET | `/api/v1/config` | Platform config + setup status |
+| GET | `/api/v1/setup/status` | First-time setup status |
+| POST | `/api/v1/setup/complete` | Complete first-time setup |
 | POST | `/api/v1/auth/signup` | Register |
 | POST | `/api/v1/auth/login` | Login → JWT |
 | GET | `/api/v1/auth/me` | Current user |
@@ -376,6 +453,11 @@ Standard:       Root Backend:       Monorepo:
 | POST | `/api/v1/projects/:id/domain` | Set custom domain |
 | POST | `/api/v1/projects/:id/domain/verify` | Verify DNS |
 | POST | `/api/v1/projects/:id/webhook` | Enable auto-deploy |
+| GET | `/api/v1/projects/:id/database` | Database provisioning status |
+| POST | `/api/v1/projects/:id/database/postgres` | Enable PostgreSQL |
+| POST | `/api/v1/projects/:id/database/mariadb` | Enable MariaDB |
+| POST | `/api/v1/projects/:id/database/redis` | Enable Redis |
+| POST | `/api/v1/projects/:id/database/test` | Test database connections |
 | GET | `/api/v1/deployments/:id` | Deployment detail |
 | GET | `/api/v1/deployments/:id/logs` | Get logs |
 | GET | `/api/v1/deployments/:id/stats` | Container CPU/memory |
@@ -388,12 +470,15 @@ Standard:       Root Backend:       Monorepo:
 ## Admin Panel
 
 Access at `/admin` (admin role required). Features:
-- Dashboard with platform stats
+- Dashboard with platform stats (users, projects, deployments, containers, databases)
 - User management (role toggle, delete)
 - All projects and deployments
 - Docker container management (stop, remove, cleanup exited)
 - Docker image management (delete, cleanup unused)
+- Database management (view/delete provisioned PostgreSQL, MariaDB, Redis)
 - Deployment logs viewer
+- Platform settings
+- Changelog (version history of platform updates)
 
 ---
 
@@ -402,45 +487,50 @@ Access at `/admin` (admin role required). Features:
 ```
 CloudDabba/
 ├── backend/
-│   ├── prisma/                    # Database schema
+│   ├── prisma/                    # Database schema + seed
 │   ├── src/
 │   │   ├── api/                   # Controllers, routes, validators
-│   │   ├── core/                  # Services, middleware
+│   │   ├── core/
 │   │   │   ├── services/
-│   │   │   │   ├── deployment.service.ts   # Deploy pipeline
-│   │   │   │   ├── docker.service.ts       # Docker operations
-│   │   │   │   ├── domain.service.ts       # Custom domain + DNS
-│   │   │   │   ├── github.service.ts       # Detection engine
-│   │   │   │   ├── nginx.service.ts        # NGINX + auto-SSL
-│   │   │   │   └── log.service.ts          # Log streaming
+│   │   │   │   ├── deployment.service.ts         # Deploy pipeline
+│   │   │   │   ├── docker.service.ts             # Docker operations
+│   │   │   │   ├── domain.service.ts             # Custom domain + DNS
+│   │   │   │   ├── github.service.ts             # Detection engine
+│   │   │   │   ├── nginx.service.ts              # NGINX + auto-SSL
+│   │   │   │   ├── database-provision.service.ts # DB provisioning
+│   │   │   │   ├── setup.service.ts              # First-time setup
+│   │   │   │   └── log.service.ts                # Log streaming
 │   │   │   └── middleware/
-│   │   │       └── subdomain-proxy.middleware.ts
+│   │   │       ├── subdomain-proxy.middleware.ts
+│   │   │       └── setup-guard.middleware.ts      # Blocks until setup done
 │   │   ├── infrastructure/
 │   │   │   ├── docker/templates/  # Dockerfile templates
 │   │   │   └── websocket/         # WebSocket log streaming
+│   │   ├── data/changelog.ts      # Platform version history
 │   │   └── shared/                # Config, utils
-│   └── .env.production
+│   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── ui/                # Button, Card, Input, Toast, Skeleton
-│   │   │   ├── Icon3DPro.tsx      # 3D icon system
-│   │   │   ├── LogTerminal.tsx    # Real-time log viewer
-│   │   │   └── Breadcrumbs.tsx
 │   │   ├── pages/
 │   │   │   ├── landing/           # Landing page sections
-│   │   │   ├── admin/             # Admin panel pages
+│   │   │   ├── admin/             # Admin panel (8 pages)
+│   │   │   ├── SetupWizard.tsx    # First-time setup wizard
 │   │   │   ├── Dashboard.tsx
 │   │   │   ├── Deploy.tsx         # Deploy wizard
-│   │   │   ├── ProjectDetail.tsx  # Project + domain + webhook
+│   │   │   ├── ProjectDetail.tsx  # Project + domain + webhook + databases
 │   │   │   └── LogsViewer.tsx     # Build + runtime logs
-│   │   └── hooks/
-│   │       ├── useDeploymentLogs.ts
-│   │       ├── useContainerLogs.ts
-│   │       └── useKeyboardShortcuts.ts
-├── .github/workflows/deploy.yml   # CI/CD
+│   │   └── components/ui/         # Button, Card, Input, Toast, Spinner
+├── nginx/
+│   ├── clouddabba.conf.template   # NGINX template for install.sh
+│   └── production.conf
+├── .github/workflows/deploy.yml   # CI/CD (auto-deploy on push)
+├── Dockerfile                     # Multi-stage Docker build
+├── docker-compose.yml             # Dev (PostgreSQL + Redis)
+├── docker-compose.prod.yml        # Production (full platform)
+├── docker-entrypoint.sh           # Docker startup script
+├── install.sh                     # One-click installer
 ├── ecosystem.config.js            # PM2 config
-└── docker-compose.yml             # Dev database
+└── .env.docker                    # Docker env template
 ```
 
 ---
