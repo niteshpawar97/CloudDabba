@@ -244,8 +244,9 @@ setup_databases() {
   info "Starting PostgreSQL and Redis containers..."
   cd "$INSTALL_DIR"
 
-  POSTGRES_PASSWORD="$DB_PASSWORD" docker compose up -d postgres redis 2>&1 | tee -a "$LOG_FILE" || \
-  DB_PASSWORD="$DB_PASSWORD" REDIS_PASSWORD="$REDIS_PASSWORD" docker compose up -d 2>&1 | tee -a "$LOG_FILE"
+  # Export so docker compose picks up the env var for ${DB_PASSWORD:-password}
+  export DB_PASSWORD
+  run docker compose up -d
 
   ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && docker compose down 2>/dev/null")
 
@@ -253,7 +254,6 @@ setup_databases() {
   for i in $(seq 1 30); do
     if docker exec clouddabba-db pg_isready -U clouddabba &>/dev/null; then
       success "PostgreSQL ready"
-      docker exec clouddabba-db psql -U clouddabba -c "ALTER USER clouddabba PASSWORD '${DB_PASSWORD}';" >> "$LOG_FILE" 2>&1 || true
       return
     fi
     echo -e "${GRAY}       Waiting... ($i/30)${NC}"

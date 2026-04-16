@@ -6,7 +6,7 @@ services:
     container_name: clouddabba-db
     environment:
       POSTGRES_USER: clouddabba
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
       POSTGRES_DB: clouddabba
     ports:
       - "5432:5432"
