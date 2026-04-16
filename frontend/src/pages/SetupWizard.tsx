@@ -4,7 +4,7 @@ import { getSetupStatus, completeSetup } from '../api/setup';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
-import { Cloud, Globe, Mail, Lock, User, ArrowRight, Check, Rocket } from 'lucide-react';
+import { Cloud, Globe, Lock, ArrowRight, Check, Rocket } from 'lucide-react';
 
 export function SetupWizard() {
   const navigate = useNavigate();
