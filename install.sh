@@ -27,11 +27,18 @@ error()   { echo -e "${RED}[ ERR]${NC} $1" | tee -a "$LOG_FILE"; }
 
 # Run a command with live output (dimmed) + log
 run() {
+  set +e
   "$@" 2>&1 | while IFS= read -r line; do
     echo -e "${GRAY}       $line${NC}"
     echo "$line" >> "$LOG_FILE"
   done
-  return "${PIPESTATUS[0]}"
+  local exit_code="${PIPESTATUS[0]}"
+  set -e
+  if [ "$exit_code" -ne 0 ]; then
+    error "Command failed: $1 (exit code: $exit_code)"
+    return "$exit_code"
+  fi
+  return 0
 }
 
 # Run silently (only log, no screen output)
@@ -246,9 +253,21 @@ setup_databases() {
 
   # Export so docker compose picks up the env var for ${DB_PASSWORD:-password}
   export DB_PASSWORD
-  run docker compose up -d
 
-  ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && docker compose down 2>/dev/null")
+  # Support both "docker compose" (v2) and "docker-compose" (v1)
+  if docker compose version &>/dev/null; then
+    COMPOSE_CMD="docker compose"
+  elif command -v docker-compose &>/dev/null; then
+    COMPOSE_CMD="docker-compose"
+  else
+    info "Installing docker-compose plugin..."
+    run sudo apt-get install -y docker-compose-v2 || run sudo apt-get install -y docker-compose
+  fi
+  COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
+
+  run $COMPOSE_CMD up -d
+
+  ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && $COMPOSE_CMD down 2>/dev/null")
 
   info "Waiting for PostgreSQL to be ready..."
   for i in $(seq 1 30); do
