@@ -11,6 +11,11 @@ INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$INSTALL_DIR/install.log"
 ROLLBACK_ACTIONS=()
 
+# --- Progress Tracking ---
+TOTAL_STEPS=12
+CURRENT_STEP=0
+START_TIME=0
+
 # --- Colors ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -18,12 +23,24 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 GRAY='\033[0;90m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 info()    { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"; }
 success() { echo -e "${GREEN}[  OK]${NC} $1" | tee -a "$LOG_FILE"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"; }
 error()   { echo -e "${RED}[ ERR]${NC} $1" | tee -a "$LOG_FILE"; }
+
+step() {
+  CURRENT_STEP=$((CURRENT_STEP + 1))
+  local pct=$((CURRENT_STEP * 100 / TOTAL_STEPS))
+  local elapsed=$(( $(date +%s) - START_TIME ))
+  local mins=$((elapsed / 60))
+  local secs=$((elapsed % 60))
+  echo ""
+  echo -e "${CYAN}${BOLD}━━━ Step ${CURRENT_STEP}/${TOTAL_STEPS} [${pct}%] ━━━━━━━━━━━━━━━━━━━━━ ${GRAY}${mins}m ${secs}s elapsed${NC}"
+  info "$1"
+}
 
 # Run a command with live output (dimmed) + log
 run() {
@@ -69,7 +86,6 @@ print_banner() {
 
 # --- OS Detection ---
 detect_os() {
-  info "Detecting operating system..."
   if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS_NAME="$ID"
@@ -137,12 +153,10 @@ check_and_install_deps() {
 
   echo ""
   success "All dependencies ready!"
-  echo ""
 }
 
 # --- Server IP Detection ---
 detect_server_ip() {
-  info "Detecting server IP..."
   SERVER_IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || \
               curl -s --max-time 5 https://ifconfig.me/ip 2>/dev/null || \
               hostname -I | awk '{print $1}')
@@ -152,9 +166,6 @@ detect_server_ip() {
 # --- Interactive Prompts ---
 prompt_configuration() {
   echo ""
-  echo -e "${CYAN}=== Platform Configuration ===${NC}"
-  echo ""
-
   read -rp "$(echo -e "${BLUE}Domain${NC} (e.g., clouddabba.yourdomain.com) [${SERVER_IP}]: ")" DOMAIN
   DOMAIN="${DOMAIN:-$SERVER_IP}"
 
@@ -172,33 +183,24 @@ prompt_configuration() {
   ADMIN_NAME="${ADMIN_NAME:-Admin}"
 
   echo ""
-  info "Configuration:"
-  info "  Domain: $DOMAIN"
-  info "  Email:  $ADMIN_EMAIL"
-  info "  Name:   $ADMIN_NAME"
-  echo ""
+  success "Domain: $DOMAIN | Email: $ADMIN_EMAIL | Name: $ADMIN_NAME"
 }
 
 # --- Secret Generation ---
 generate_secrets() {
-  info "Generating security keys..."
   JWT_SECRET=$(openssl rand -base64 48)
   ENCRYPTION_KEY=$(openssl rand -hex 32)
   DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
   REDIS_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
-  success "Security keys generated"
+  success "JWT secret, encryption key, DB & Redis passwords generated"
 }
 
 # --- Environment File ---
 generate_env_file() {
-  info "Generating environment configuration..."
-
   if [ "$DOMAIN" = "$SERVER_IP" ]; then
     CORS_ORIGIN="http://${SERVER_IP}:6050"
-    PROTOCOL="http"
   else
     CORS_ORIGIN="http://${DOMAIN},https://${DOMAIN}"
-    PROTOCOL="https"
   fi
 
   cat > "$INSTALL_DIR/backend/.env" << EOF
@@ -243,15 +245,12 @@ MARIADB_PORT=3306
 EOF
 
   export DB_PASSWORD REDIS_PASSWORD
-  success "Environment file generated"
+  success "Environment file written to backend/.env"
 }
 
 # --- Database Setup ---
 setup_databases() {
-  info "Starting PostgreSQL and Redis containers..."
   cd "$INSTALL_DIR"
-
-  # Export so docker compose picks up the env var for ${DB_PASSWORD:-password}
   export DB_PASSWORD
 
   # Support both "docker compose" (v2) and "docker-compose" (v1)
@@ -269,10 +268,10 @@ setup_databases() {
 
   ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && $COMPOSE_CMD down 2>/dev/null")
 
-  info "Waiting for PostgreSQL to be ready..."
+  info "Waiting for PostgreSQL..."
   for i in $(seq 1 30); do
     if docker exec clouddabba-db pg_isready -U clouddabba &>/dev/null; then
-      success "PostgreSQL ready"
+      success "PostgreSQL ready | Redis ready"
       return
     fi
     echo -e "${GRAY}       Waiting... ($i/30)${NC}"
@@ -283,9 +282,10 @@ setup_databases() {
 }
 
 # --- Build Application ---
-build_application() {
-  info "Installing backend dependencies..."
+build_backend() {
   cd "$INSTALL_DIR/backend"
+
+  info "Installing npm packages..."
   run npm ci --production=false
 
   info "Generating Prisma client..."
@@ -294,40 +294,39 @@ build_application() {
   info "Pushing database schema..."
   run npx prisma db push
 
-  info "Building backend (TypeScript)..."
+  info "Compiling TypeScript..."
   run npm run build
 
   if [ ! -f "$INSTALL_DIR/backend/dist/server.js" ]; then
     error "Backend build failed - dist/server.js not found"
     exit 1
   fi
-  success "Backend built successfully"
+  success "Backend compiled successfully"
 
-  info "Installing frontend dependencies..."
+  # Seed database
+  info "Seeding database..."
+  run npx prisma db seed || true
+  success "Database seeded"
+}
+
+build_frontend() {
   cd "$INSTALL_DIR/frontend"
+
+  info "Installing npm packages..."
   run npm ci
 
-  info "Building frontend (Vite)..."
+  info "Compiling React + Vite..."
   run npm run build
 
   if [ ! -f "$INSTALL_DIR/frontend/dist/index.html" ]; then
     error "Frontend build failed - dist/index.html not found"
     exit 1
   fi
-  success "Frontend built successfully"
-}
-
-# --- Seed Database ---
-seed_database() {
-  info "Seeding database (creating admin user)..."
-  cd "$INSTALL_DIR/backend"
-  run npx prisma db seed || true
-  success "Database seeded"
+  success "Frontend compiled successfully"
 }
 
 # --- NGINX Configuration ---
 setup_nginx() {
-  info "Configuring NGINX..."
   local TEMPLATE="$INSTALL_DIR/nginx/clouddabba.conf.template"
   local NGINX_CONF="/etc/nginx/nginx.conf"
 
@@ -342,11 +341,21 @@ setup_nginx() {
       sudo systemctl reload nginx >> "$LOG_FILE" 2>&1
       success "NGINX configured for ${DOMAIN}"
     else
-      error "NGINX config test failed — check $LOG_FILE"
+      error "NGINX config test failed"
       exit 1
     fi
   else
     warn "NGINX template not found, skipping"
+  fi
+
+  # Firewall
+  if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
+    info "Adding firewall rules..."
+    sudo ufw allow 80/tcp >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow 443/tcp >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow from 172.17.0.0/16 to any port 5432 >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow from 172.17.0.0/16 to any port 6379 >> "$LOG_FILE" 2>&1 || true
+    success "Firewall rules added"
   fi
 }
 
@@ -361,21 +370,20 @@ setup_ssl() {
   RESOLVED_IP=$(dig +short "$DOMAIN" 2>/dev/null | head -1)
 
   if [ "$RESOLVED_IP" = "$SERVER_IP" ]; then
-    info "DNS verified! Setting up SSL certificate..."
+    info "DNS verified! Issuing SSL certificate..."
     if sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" 2>&1 | tee -a "$LOG_FILE"; then
       success "SSL certificate installed"
     else
-      warn "SSL setup failed. Run later: sudo certbot --nginx -d ${DOMAIN}"
+      warn "SSL failed. Run later: sudo certbot --nginx -d ${DOMAIN}"
     fi
   else
-    warn "DNS not pointing to this server (expected: ${SERVER_IP}, got: ${RESOLVED_IP:-none})"
-    warn "After updating DNS, run: sudo certbot --nginx -d ${DOMAIN}"
+    warn "DNS not pointing here (expected: ${SERVER_IP}, got: ${RESOLVED_IP:-none})"
+    warn "After DNS setup, run: sudo certbot --nginx -d ${DOMAIN}"
   fi
 }
 
 # --- PM2 Setup ---
 setup_pm2() {
-  info "Starting CloudDabba with PM2..."
   cd "$INSTALL_DIR"
   pm2 delete clouddabba-api 2>/dev/null || true
   run pm2 start ecosystem.config.js
@@ -383,14 +391,11 @@ setup_pm2() {
 
   run_quiet pm2 save
   pm2 startup 2>&1 | grep "sudo" | bash >> "$LOG_FILE" 2>&1 || true
-  success "PM2 started + auto-start on reboot configured"
-}
+  success "PM2 started + auto-start on reboot"
 
-# --- Verify Installation ---
-verify_installation() {
-  info "Verifying installation..."
+  # Verify
+  info "Verifying health..."
   sleep 3
-
   for i in $(seq 1 10); do
     if curl -sf http://localhost:6050/api/v1/health > /dev/null 2>&1; then
       success "Health check passed!"
@@ -399,21 +404,7 @@ verify_installation() {
     echo -e "${GRAY}       Waiting for server... ($i/10)${NC}"
     sleep 2
   done
-
-  warn "Health check did not pass - server may still be starting"
-  warn "Check logs: pm2 logs clouddabba-api"
-}
-
-# --- UFW Rules ---
-setup_firewall() {
-  if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
-    info "Configuring firewall rules..."
-    sudo ufw allow 80/tcp >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow 443/tcp >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow from 172.17.0.0/16 to any port 5432 >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow from 172.17.0.0/16 to any port 6379 >> "$LOG_FILE" 2>&1 || true
-    success "Firewall rules added (80, 443, Docker subnet)"
-  fi
+  warn "Health check pending - server may still be starting"
 }
 
 # --- Summary ---
@@ -425,6 +416,10 @@ print_summary() {
     URL="https://${DOMAIN}"
   fi
 
+  local total_elapsed=$(( $(date +%s) - START_TIME ))
+  local total_mins=$((total_elapsed / 60))
+  local total_secs=$((total_elapsed % 60))
+
   echo ""
   echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║       CloudDabba Installed Successfully!       ║${NC}"
@@ -433,6 +428,7 @@ print_summary() {
   echo -e "  ${CYAN}Platform URL:${NC}   ${URL}"
   echo -e "  ${CYAN}Setup Wizard:${NC}   ${URL}/setup"
   echo -e "  ${CYAN}Admin Email:${NC}    ${ADMIN_EMAIL}"
+  echo -e "  ${CYAN}Total Time:${NC}     ${total_mins}m ${total_secs}s"
   echo ""
   echo -e "  ${YELLOW}Next Step:${NC} Open the Setup Wizard URL above in your browser"
   echo -e "             to complete the platform configuration."
@@ -442,24 +438,50 @@ print_summary() {
   echo ""
 }
 
-# --- Main ---
+# ============================================
+# MAIN
+# ============================================
 main() {
   echo "" > "$LOG_FILE"
+  START_TIME=$(date +%s)
   print_banner
+
+  step "Detecting operating system"
   detect_os
+
+  step "Installing dependencies"
   check_and_install_deps
+
+  step "Detecting server IP"
   detect_server_ip
+
+  step "Platform configuration"
   prompt_configuration
+
+  step "Generating security keys"
   generate_secrets
+
+  step "Generating environment config"
   generate_env_file
+
+  step "Starting PostgreSQL & Redis"
   setup_databases
-  build_application
-  seed_database
+
+  step "Building backend"
+  build_backend
+
+  step "Building frontend"
+  build_frontend
+
+  step "Configuring NGINX & firewall"
   setup_nginx
-  setup_firewall
+
+  step "Setting up SSL"
   setup_ssl
+
+  step "Starting CloudDabba"
   setup_pm2
-  verify_installation
+
   print_summary
 }
 
