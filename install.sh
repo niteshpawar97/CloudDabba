@@ -6,106 +6,107 @@ set -euo pipefail
 # Self-hosted PaaS Platform
 # ============================================
 
-CLOUDDABBA_VERSION="1.5.0"
+VERSION="1.5.0"
 INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$INSTALL_DIR/install.log"
 ROLLBACK_ACTIONS=()
 
-# --- Progress Tracking ---
-TOTAL_STEPS=12
-CURRENT_STEP=0
-START_TIME=0
+# --- Progress ---
+TOTAL=12
+STEP=0
+T0=0
 
 # --- Colors ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-GRAY='\033[0;90m'
-BOLD='\033[1m'
-NC='\033[0m'
+R='\033[0;31m'
+G='\033[0;32m'
+Y='\033[1;33m'
+B='\033[0;34m'
+C='\033[0;36m'
+D='\033[0;90m'
+W='\033[1;37m'
+BLD='\033[1m'
+DIM='\033[2m'
+N='\033[0m'
 
-info()    { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"; }
-success() { echo -e "${GREEN}[  OK]${NC} $1" | tee -a "$LOG_FILE"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"; }
-error()   { echo -e "${RED}[ ERR]${NC} $1" | tee -a "$LOG_FILE"; }
+# --- Logging ---
+log()  { echo "$1" >> "$LOG_FILE"; }
+info() { echo -e "  ${D}│${N} $1" | tee -a "$LOG_FILE"; }
+ok()   { echo -e "  ${D}│${N} ${G}✓${N} $1" | tee -a "$LOG_FILE"; }
+wrn()  { echo -e "  ${D}│${N} ${Y}⚠${N} $1" | tee -a "$LOG_FILE"; }
+err()  { echo -e "  ${D}│${N} ${R}✗${N} $1" | tee -a "$LOG_FILE"; }
 
-step() {
-  CURRENT_STEP=$((CURRENT_STEP + 1))
-  local pct=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-  local elapsed=$(( $(date +%s) - START_TIME ))
-  local mins=$((elapsed / 60))
-  local secs=$((elapsed % 60))
-  echo ""
-  echo -e "${CYAN}${BOLD}━━━ Step ${CURRENT_STEP}/${TOTAL_STEPS} [${pct}%] ━━━━━━━━━━━━━━━━━━━━━ ${GRAY}${mins}m ${secs}s elapsed${NC}"
-  info "$1"
+elapsed() {
+  local e=$(( $(date +%s) - T0 ))
+  printf "%dm %ds" $((e/60)) $((e%60))
 }
 
-# Run a command with live output (dimmed) + log
+step() {
+  STEP=$((STEP + 1))
+  local pct=$((STEP * 100 / TOTAL))
+  local bar=""
+  local filled=$((pct / 5))
+  for ((i=0; i<filled; i++)); do bar+="█"; done
+  for ((i=filled; i<20; i++)); do bar+="░"; done
+  echo ""
+  echo -e "  ${C}${BLD}[$bar] ${pct}%${N}  ${W}Step ${STEP}/${TOTAL}${N}  ${D}$(elapsed)${N}"
+  echo -e "  ${D}┌─${N} ${BLD}$1${N}"
+}
+
+# Run with dimmed live output
 run() {
   set +e
   "$@" 2>&1 | while IFS= read -r line; do
-    echo -e "${GRAY}       $line${NC}"
+    echo -e "  ${D}│  $line${N}"
     echo "$line" >> "$LOG_FILE"
   done
-  local exit_code="${PIPESTATUS[0]}"
+  local rc="${PIPESTATUS[0]}"
   set -e
-  if [ "$exit_code" -ne 0 ]; then
-    error "Command failed: $1 (exit code: $exit_code)"
-    return "$exit_code"
+  if [ "$rc" -ne 0 ]; then
+    err "Command failed (exit $rc)"
+    return "$rc"
   fi
-  return 0
 }
 
-# Run silently (only log, no screen output)
-run_quiet() {
-  "$@" >> "$LOG_FILE" 2>&1
-}
+run_quiet() { "$@" >> "$LOG_FILE" 2>&1; }
 
 rollback() {
   if [ ${#ROLLBACK_ACTIONS[@]} -gt 0 ]; then
-    error "Installation failed! Rolling back..."
+    err "Installation failed! Rolling back..."
     for ((i=${#ROLLBACK_ACTIONS[@]}-1; i>=0; i--)); do
       eval "${ROLLBACK_ACTIONS[$i]}" 2>/dev/null || true
     done
-    error "Rollback complete. Check $LOG_FILE for details."
+    err "Rollback done. See $LOG_FILE"
   fi
 }
 trap rollback ERR
 
-print_banner() {
-  echo -e "${CYAN}"
-  echo "  ╔═══════════════════════════════════════╗"
-  echo "  ║         CloudDabba Installer           ║"
-  echo "  ║       Self-hosted PaaS Platform        ║"
-  echo "  ║            v${CLOUDDABBA_VERSION}                    ║"
-  echo "  ╚═══════════════════════════════════════╝"
-  echo -e "${NC}"
+banner() {
+  local w=45
+  local title="CloudDabba Installer"
+  local sub="Self-hosted PaaS Platform"
+  local ver="v${VERSION}"
+  echo ""
+  echo -e "  ${C}╔$(printf '═%.0s' $(seq 1 $w))╗${N}"
+  printf "  ${C}║${N}${BLD}%*s${N}${C}║${N}\n" $(( (w + ${#title}) / 2 )) "$title"
+  printf "  ${C}║${N}${D}%*s${N}${C}║${N}\n" $(( (w + ${#sub}) / 2 )) "$sub"
+  printf "  ${C}║${N}${D}%*s${N}${C}║${N}\n" $(( (w + ${#ver}) / 2 )) "$ver"
+  echo -e "  ${C}╚$(printf '═%.0s' $(seq 1 $w))╝${N}"
+  echo ""
 }
 
-# --- OS Detection ---
+# ============================================
+# FUNCTIONS
+# ============================================
+
 detect_os() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS_NAME="$ID"
     OS_VERSION="$VERSION_ID"
-    success "Detected: $PRETTY_NAME"
+    ok "Detected: $PRETTY_NAME"
   else
-    error "Unsupported OS. Requires Ubuntu 22.04+ or Debian 12+"
+    err "Unsupported OS. Requires Ubuntu 22.04+ or Debian 12+"
     exit 1
-  fi
-}
-
-# --- Dependency Installation ---
-install_if_missing() {
-  local cmd="$1" pkg="$2"
-  if command -v "$cmd" &>/dev/null; then
-    success "$cmd already installed"
-  else
-    info "Installing $pkg..."
-    run sudo apt-get install -y "$pkg"
-    success "$pkg installed"
   fi
 }
 
@@ -120,9 +121,9 @@ check_and_install_deps() {
     run_quiet sudo systemctl enable docker
     run_quiet sudo systemctl start docker
     sudo usermod -aG docker "$USER" 2>/dev/null || true
-    success "Docker installed"
+    ok "Docker installed"
   else
-    success "Docker already installed ($(docker --version | cut -d' ' -f3 | tr -d ','))"
+    ok "Docker $(docker --version | cut -d' ' -f3 | tr -d ',')"
   fi
 
   # Node.js 22
@@ -130,72 +131,66 @@ check_and_install_deps() {
     info "Installing Node.js 22..."
     run bash -c "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
     run sudo apt-get install -y nodejs
-    success "Node.js $(node -v) installed"
+    ok "Node.js $(node -v)"
   else
-    success "Node.js $(node -v) already installed"
+    ok "Node.js $(node -v)"
   fi
 
   # NGINX
-  install_if_missing nginx nginx
+  if command -v nginx &>/dev/null; then ok "NGINX"; else
+    info "Installing NGINX..."; run sudo apt-get install -y nginx; ok "NGINX installed"; fi
 
   # PM2
-  if ! command -v pm2 &>/dev/null; then
-    info "Installing PM2..."
-    run sudo npm install -g pm2
-    success "PM2 installed"
-  else
-    success "PM2 already installed"
-  fi
+  if command -v pm2 &>/dev/null; then ok "PM2"; else
+    info "Installing PM2..."; run sudo npm install -g pm2; ok "PM2 installed"; fi
 
   # Certbot
-  install_if_missing certbot certbot
+  if command -v certbot &>/dev/null; then ok "Certbot"; else
+    info "Installing Certbot..."; run sudo apt-get install -y certbot; ok "Certbot installed"; fi
   run_quiet sudo apt-get install -y python3-certbot-nginx || true
 
-  echo ""
-  success "All dependencies ready!"
+  echo -e "  ${D}└─${N} ${G}${BLD}All dependencies ready${N}"
 }
 
-# --- Server IP Detection ---
 detect_server_ip() {
   SERVER_IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || \
               curl -s --max-time 5 https://ifconfig.me/ip 2>/dev/null || \
               hostname -I | awk '{print $1}')
-  success "Server IP: $SERVER_IP"
+  ok "Server IP: ${W}$SERVER_IP${N}"
 }
 
-# --- Interactive Prompts ---
 prompt_configuration() {
   echo ""
-  read -rp "$(echo -e "${BLUE}Domain${NC} (e.g., clouddabba.yourdomain.com) [${SERVER_IP}]: ")" DOMAIN
+  read -rp "$(echo -e "  ${D}│${N} ${B}Domain${N} [${SERVER_IP}]: ")" DOMAIN
   DOMAIN="${DOMAIN:-$SERVER_IP}"
 
-  read -rp "$(echo -e "${BLUE}Admin Email${NC} [admin@${DOMAIN}]: ")" ADMIN_EMAIL
+  read -rp "$(echo -e "  ${D}│${N} ${B}Admin Email${N} [admin@${DOMAIN}]: ")" ADMIN_EMAIL
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN}}"
 
   while true; do
-    read -rsp "$(echo -e "${BLUE}Admin Password${NC} (min 8 chars): ")" ADMIN_PASSWORD
+    read -rsp "$(echo -e "  ${D}│${N} ${B}Admin Password${N} (min 8): ")" ADMIN_PASSWORD
     echo ""
     if [ ${#ADMIN_PASSWORD} -ge 8 ]; then break; fi
-    warn "Password must be at least 8 characters"
+    wrn "Password must be at least 8 characters"
   done
 
-  read -rp "$(echo -e "${BLUE}Admin Name${NC} [Admin]: ")" ADMIN_NAME
+  read -rp "$(echo -e "  ${D}│${N} ${B}Admin Name${N} [Admin]: ")" ADMIN_NAME
   ADMIN_NAME="${ADMIN_NAME:-Admin}"
 
   echo ""
-  success "Domain: $DOMAIN | Email: $ADMIN_EMAIL | Name: $ADMIN_NAME"
+  ok "Domain: ${W}$DOMAIN${N}"
+  ok "Email:  ${W}$ADMIN_EMAIL${N}"
+  ok "Name:   ${W}$ADMIN_NAME${N}"
 }
 
-# --- Secret Generation ---
 generate_secrets() {
   JWT_SECRET=$(openssl rand -base64 48)
   ENCRYPTION_KEY=$(openssl rand -hex 32)
   DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
   REDIS_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
-  success "JWT secret, encryption key, DB & Redis passwords generated"
+  ok "JWT, encryption key, DB & Redis passwords generated"
 }
 
-# --- Environment File ---
 generate_env_file() {
   if [ "$DOMAIN" = "$SERVER_IP" ]; then
     CORS_ORIGIN="http://${SERVER_IP}:6050"
@@ -207,35 +202,24 @@ generate_env_file() {
 NODE_ENV=production
 PORT=6050
 API_VERSION=v1
-
 DATABASE_URL=postgresql://clouddabba:${DB_PASSWORD}@localhost:5432/clouddabba
-
 JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRE=7d
-
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
-
 BASE_DOMAIN=${DOMAIN}
-
 DOCKER_SOCKET=/var/run/docker.sock
-
 NGINX_SITES_PATH=/etc/nginx/sites-enabled
 NGINX_RELOAD_CMD=sudo nginx -s reload
-
 PORT_RANGE_START=10000
 PORT_RANGE_END=20000
-
 CORS_ORIGIN=${CORS_ORIGIN}
 LOG_LEVEL=info
-
 PROVISION_DB_ADMIN_URL=postgresql://clouddabba:${DB_PASSWORD}@localhost:5432/postgres
 PROVISION_DB_HOST=172.17.0.1
 PROVISION_DB_PORT=5432
-
 REDIS_HOST=172.17.0.1
 REDIS_PORT=6379
 REDIS_PASSWORD=${REDIS_PASSWORD}
-
 MARIADB_ADMIN_HOST=localhost
 MARIADB_ADMIN_PORT=3306
 MARIADB_ADMIN_USER=root
@@ -245,144 +229,136 @@ MARIADB_PORT=3306
 EOF
 
   export DB_PASSWORD REDIS_PASSWORD
-  success "Environment file written to backend/.env"
+  ok "backend/.env written"
 }
 
-# --- Database Setup ---
 setup_databases() {
   cd "$INSTALL_DIR"
   export DB_PASSWORD
 
-  # Support both "docker compose" (v2) and "docker-compose" (v1)
   if docker compose version &>/dev/null; then
     COMPOSE_CMD="docker compose"
   elif command -v docker-compose &>/dev/null; then
     COMPOSE_CMD="docker-compose"
   else
-    info "Installing docker-compose plugin..."
+    info "Installing docker-compose..."
     run sudo apt-get install -y docker-compose-v2 || run sudo apt-get install -y docker-compose
   fi
   COMPOSE_CMD="${COMPOSE_CMD:-docker compose}"
 
   run $COMPOSE_CMD up -d
-
   ROLLBACK_ACTIONS+=("cd '$INSTALL_DIR' && $COMPOSE_CMD down 2>/dev/null")
 
   info "Waiting for PostgreSQL..."
   for i in $(seq 1 30); do
     if docker exec clouddabba-db pg_isready -U clouddabba &>/dev/null; then
-      success "PostgreSQL ready | Redis ready"
+      ok "PostgreSQL ${G}ready${N}"
+      ok "Redis ${G}ready${N}"
       return
     fi
-    echo -e "${GRAY}       Waiting... ($i/30)${NC}"
+    echo -ne "\r  ${D}│  ⏳ Waiting... ($i/30)${N}   "
     sleep 2
   done
-  error "PostgreSQL did not start in time"
+  echo ""
+  err "PostgreSQL did not start in time"
   exit 1
 }
 
-# --- Build Application ---
 build_backend() {
   cd "$INSTALL_DIR/backend"
 
-  info "Installing npm packages..."
+  info "npm install..."
   run npm ci --production=false
 
-  info "Generating Prisma client..."
+  info "Prisma generate..."
   run npx prisma generate
 
-  info "Pushing database schema..."
+  info "Database schema push..."
   run npx prisma db push
 
-  info "Compiling TypeScript..."
+  info "TypeScript compile..."
   run npm run build
 
   if [ ! -f "$INSTALL_DIR/backend/dist/server.js" ]; then
-    error "Backend build failed - dist/server.js not found"
+    err "Build failed — dist/server.js not found"
     exit 1
   fi
-  success "Backend compiled successfully"
+  ok "Backend compiled"
 
-  # Seed database
   info "Seeding database..."
   run npx prisma db seed || true
-  success "Database seeded"
+  ok "Database seeded"
 }
 
 build_frontend() {
   cd "$INSTALL_DIR/frontend"
 
-  info "Installing npm packages..."
+  info "npm install..."
   run npm ci
 
-  info "Compiling React + Vite..."
+  info "Vite build..."
   run npm run build
 
   if [ ! -f "$INSTALL_DIR/frontend/dist/index.html" ]; then
-    error "Frontend build failed - dist/index.html not found"
+    err "Build failed — dist/index.html not found"
     exit 1
   fi
-  success "Frontend compiled successfully"
+  ok "Frontend compiled"
 }
 
-# --- NGINX Configuration ---
 setup_nginx() {
-  local TEMPLATE="$INSTALL_DIR/nginx/clouddabba.conf.template"
-  local NGINX_CONF="/etc/nginx/nginx.conf"
+  local TPL="$INSTALL_DIR/nginx/clouddabba.conf.template"
+  local CONF="/etc/nginx/nginx.conf"
 
-  if [ -f "$TEMPLATE" ]; then
-    sudo cp "$NGINX_CONF" "${NGINX_CONF}.backup" 2>/dev/null || true
-    ROLLBACK_ACTIONS+=("sudo cp '${NGINX_CONF}.backup' '$NGINX_CONF' && sudo nginx -s reload")
+  if [ -f "$TPL" ]; then
+    sudo cp "$CONF" "${CONF}.bak" 2>/dev/null || true
+    ROLLBACK_ACTIONS+=("sudo cp '${CONF}.bak' '$CONF' && sudo nginx -s reload")
 
-    sed "s/__DOMAIN__/${DOMAIN}/g" "$TEMPLATE" | sudo tee "$NGINX_CONF" > /dev/null
+    sed "s/__DOMAIN__/${DOMAIN}/g" "$TPL" | sudo tee "$CONF" > /dev/null
     sudo mkdir -p /etc/nginx/sites-enabled
 
     if sudo nginx -t >> "$LOG_FILE" 2>&1; then
       sudo systemctl reload nginx >> "$LOG_FILE" 2>&1
-      success "NGINX configured for ${DOMAIN}"
+      ok "NGINX → ${W}${DOMAIN}${N}"
     else
-      error "NGINX config test failed"
+      err "NGINX config test failed"
       exit 1
     fi
   else
-    warn "NGINX template not found, skipping"
+    wrn "NGINX template not found"
   fi
 
-  # Firewall
   if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
-    info "Adding firewall rules..."
     sudo ufw allow 80/tcp >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow 443/tcp >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow from 172.17.0.0/16 to any port 5432 >> "$LOG_FILE" 2>&1 || true
     sudo ufw allow from 172.17.0.0/16 to any port 6379 >> "$LOG_FILE" 2>&1 || true
-    success "Firewall rules added"
+    ok "Firewall rules added"
   fi
 }
 
-# --- SSL Setup ---
 setup_ssl() {
   if [ "$DOMAIN" = "$SERVER_IP" ]; then
-    warn "Using IP address - SSL skipped (requires a domain name)"
+    wrn "IP address — SSL skipped"
     return
   fi
 
-  info "Checking DNS for ${DOMAIN}..."
+  info "Checking DNS..."
   RESOLVED_IP=$(dig +short "$DOMAIN" 2>/dev/null | head -1)
 
   if [ "$RESOLVED_IP" = "$SERVER_IP" ]; then
-    info "DNS verified! Issuing SSL certificate..."
+    info "DNS verified → issuing certificate..."
     if sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$ADMIN_EMAIL" 2>&1 | tee -a "$LOG_FILE"; then
-      success "SSL certificate installed"
+      ok "SSL certificate installed"
     else
-      warn "SSL failed. Run later: sudo certbot --nginx -d ${DOMAIN}"
+      wrn "SSL failed. Run: sudo certbot --nginx -d ${DOMAIN}"
     fi
   else
-    warn "DNS not pointing here (expected: ${SERVER_IP}, got: ${RESOLVED_IP:-none})"
-    warn "After DNS setup, run: sudo certbot --nginx -d ${DOMAIN}"
+    wrn "DNS not pointing here (${RESOLVED_IP:-none} ≠ ${SERVER_IP})"
+    wrn "Run later: sudo certbot --nginx -d ${DOMAIN}"
   fi
 }
 
-# --- PM2 Setup ---
 setup_pm2() {
   cd "$INSTALL_DIR"
   pm2 delete clouddabba-api 2>/dev/null || true
@@ -391,23 +367,22 @@ setup_pm2() {
 
   run_quiet pm2 save
   pm2 startup 2>&1 | grep "sudo" | bash >> "$LOG_FILE" 2>&1 || true
-  success "PM2 started + auto-start on reboot"
+  ok "PM2 running + auto-start on reboot"
 
-  # Verify
-  info "Verifying health..."
+  info "Health check..."
   sleep 3
   for i in $(seq 1 10); do
     if curl -sf http://localhost:6050/api/v1/health > /dev/null 2>&1; then
-      success "Health check passed!"
+      ok "${G}Health check passed!${N}"
       return
     fi
-    echo -e "${GRAY}       Waiting for server... ($i/10)${NC}"
+    echo -ne "\r  ${D}│  ⏳ Starting... ($i/10)${N}   "
     sleep 2
   done
-  warn "Health check pending - server may still be starting"
+  echo ""
+  wrn "Server still starting — check: pm2 logs clouddabba-api"
 }
 
-# --- Summary ---
 print_summary() {
   local URL
   if [ "$DOMAIN" = "$SERVER_IP" ]; then
@@ -416,25 +391,22 @@ print_summary() {
     URL="https://${DOMAIN}"
   fi
 
-  local total_elapsed=$(( $(date +%s) - START_TIME ))
-  local total_mins=$((total_elapsed / 60))
-  local total_secs=$((total_elapsed % 60))
+  local e=$(( $(date +%s) - T0 ))
 
   echo ""
-  echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}║       CloudDabba Installed Successfully!       ║${NC}"
-  echo -e "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
   echo ""
-  echo -e "  ${CYAN}Platform URL:${NC}   ${URL}"
-  echo -e "  ${CYAN}Setup Wizard:${NC}   ${URL}/setup"
-  echo -e "  ${CYAN}Admin Email:${NC}    ${ADMIN_EMAIL}"
-  echo -e "  ${CYAN}Total Time:${NC}     ${total_mins}m ${total_secs}s"
+  echo -e "  ${G}${BLD}╔═════════════════════════════════════════════╗${N}"
+  echo -e "  ${G}${BLD}║     ✓  CloudDabba Installed Successfully    ║${N}"
+  echo -e "  ${G}${BLD}╚═════════════════════════════════════════════╝${N}"
   echo ""
-  echo -e "  ${YELLOW}Next Step:${NC} Open the Setup Wizard URL above in your browser"
-  echo -e "             to complete the platform configuration."
+  echo -e "  ${W}Platform${N}     ${C}${URL}${N}"
+  echo -e "  ${W}Setup${N}        ${C}${URL}/setup${N}"
+  echo -e "  ${W}Admin${N}        ${ADMIN_EMAIL}"
+  echo -e "  ${W}Time${N}         $((e/60))m $((e%60))s"
   echo ""
-  echo -e "  ${BLUE}Install Log:${NC}  $LOG_FILE"
-  echo -e "  ${BLUE}App Logs:${NC}     pm2 logs clouddabba-api"
+  echo -e "  ${Y}→ Open the Setup URL in browser to finish configuration${N}"
+  echo ""
+  echo -e "  ${D}Logs: $LOG_FILE | pm2 logs clouddabba-api${N}"
   echo ""
 }
 
@@ -443,8 +415,8 @@ print_summary() {
 # ============================================
 main() {
   echo "" > "$LOG_FILE"
-  START_TIME=$(date +%s)
-  print_banner
+  T0=$(date +%s)
+  banner
 
   step "Detecting operating system"
   detect_os
