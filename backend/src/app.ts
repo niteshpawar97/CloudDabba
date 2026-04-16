@@ -21,7 +21,14 @@ app.set('trust proxy', 1);
 app.use(subdomainProxy);
 
 // Security (only applies to CloudDabba panel, not deployed apps)
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'upgrade-insecure-requests': null, // Allow HTTP when no SSL (IP-based access)
+    },
+  },
+}));
 app.use(cors({ origin: config.cors.origin, credentials: true }));
 
 // Parsing
