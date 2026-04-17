@@ -5,7 +5,7 @@ import { config } from '../../shared/config/app.config';
 import { PlatformConfig } from '../services/platform-config.service';
 import logger from '../../shared/utils/logger';
 
-async function sendErrorPage(res: Response, statusCode: number, title: string, message: string, subdomain: string) {
+async function sendErrorPage(res: Response, statusCode: number, title: string, message: string, displayDomain: string) {
   const baseDomain = await PlatformConfig.getBaseDomain();
   res.status(statusCode).send(`
 <!DOCTYPE html>
@@ -110,7 +110,7 @@ async function sendErrorPage(res: Response, statusCode: number, title: string, m
   <div class="container">
     <div class="status-code">${statusCode}</div>
     <h1>${title}</h1>
-    <div class="domain">${subdomain}.${baseDomain}</div>
+    <div class="domain">${displayDomain}</div>
     <p>${message}</p>
     ${statusCode === 502 ? `
     <div class="hint">
@@ -142,16 +142,25 @@ export async function subdomainProxy(req: Request, res: Response, next: NextFunc
   const host = req.hostname || req.headers.host?.split(':')[0] || '';
   const baseDomain = await PlatformConfig.getBaseDomain();
 
+  // Skip IPv4/IPv6 addresses — always serve the CloudDabba panel on direct IP hits
+  const isIpAddress = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
+  if (isIpAddress || host === 'localhost' || host.startsWith('127.') || !host) {
+    return next();
+  }
+
   let subdomain = '';
   let isCustomDomain = false;
 
-  // Check if request is for a subdomain of base domain
-  if (host.endsWith(baseDomain) && host !== baseDomain) {
-    subdomain = host.replace(`.${baseDomain}`, '');
-    if (!subdomain || subdomain === host) return next();
+  // Subdomain of the platform base domain (e.g. myapp.baseDomain)
+  if (baseDomain && host.endsWith(baseDomain) && host !== baseDomain) {
+    subdomain = host.slice(0, host.length - baseDomain.length - 1); // strip ".baseDomain"
+    if (!subdomain || subdomain.includes('.')) {
+      // Multi-level labels (e.g. 40.192.48.108.nitesh.app) are not valid app subdomains
+      return next();
+    }
   }
-  // Check if it's a custom domain (not base domain, not localhost)
-  else if (host !== baseDomain && host !== 'localhost' && !host.startsWith('127.') && host.includes('.')) {
+  // Custom domain attached to a project
+  else if (host !== baseDomain && host.includes('.')) {
     isCustomDomain = true;
   }
   else {
