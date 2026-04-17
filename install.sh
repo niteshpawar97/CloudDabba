@@ -382,12 +382,28 @@ setup_nginx() {
   fi
 
   if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
-    sudo ufw allow 80/tcp >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow 443/tcp >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow from 172.17.0.0/16 to any port 5432 >> "$LOG_FILE" 2>&1 || true
-    sudo ufw allow from 172.17.0.0/16 to any port 6379 >> "$LOG_FILE" 2>&1 || true
-    ok "Firewall rules added"
+    # Public-facing
+    sudo ufw allow 80/tcp                                        >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow 443/tcp                                       >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow 6050/tcp                                      >> "$LOG_FILE" 2>&1 || true
+
+    # Deployed container port range (apps bind here; users hit via NGINX but allow direct too)
+    sudo ufw allow 10000:20000/tcp                               >> "$LOG_FILE" 2>&1 || true
+
+    # Docker bridge → host services (Postgres / Redis / MariaDB)
+    sudo ufw allow from 172.17.0.0/16 to any port 5432           >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow from 172.17.0.0/16 to any port 6379           >> "$LOG_FILE" 2>&1 || true
+    sudo ufw allow from 172.17.0.0/16 to any port 3306           >> "$LOG_FILE" 2>&1 || true
+
+    ok "Firewall rules added: 80, 443, 6050, 10000-20000, DB bridge ports"
   fi
+
+  # Cloud provider reminder — install.sh can't touch AWS SG / Oracle SL / GCP firewall rules
+  echo ""
+  info "${Y}☁  Cloud firewall${N} — Open these ports in your provider console too:"
+  info "   ${W}80, 443, 6050, 10000-20000${N}"
+  info "   ${D}(AWS EC2 Security Group · Oracle Security List · GCP Firewall · DO Cloud Firewall)${N}"
+  echo ""
 }
 
 setup_ssl() {
