@@ -125,9 +125,13 @@ sudo ./install.sh
 sudo ./uninstall.sh --yes
 ```
 
-### Docker-only alternative (no scripts)
+---
 
-If you prefer to skip the VPS-style install entirely:
+## Docker Deployment
+
+If you prefer containers over the VPS-style install, use `docker-compose.prod.yml`. No wrapper scripts needed — Docker Compose itself is the "script".
+
+### Install
 
 ```bash
 git clone https://github.com/niteshpawar97/CloudDabba.git
@@ -143,7 +147,66 @@ sed -i "s/CHANGE_ME_64_CHAR_HEX_STRING/$(openssl rand -hex 32)/g" .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Then open `http://YOUR_IP:6050/setup`.
+Open `http://YOUR_IP:6050/setup` to finish first-time setup via the browser wizard.
+
+### Update
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The `--build` rebuilds the app image from the latest source. `pull` refreshes the `postgres`/`redis` base images.
+
+### Uninstall
+
+```bash
+docker compose -f docker-compose.prod.yml down -v     # -v also deletes DB + Redis volumes
+docker rmi $(docker images --filter reference='clouddabba/*' -q) 2>/dev/null
+```
+
+### Common ops
+
+| Task | Command |
+|------|---------|
+| View logs | `docker compose -f docker-compose.prod.yml logs -f app` |
+| Restart | `docker compose -f docker-compose.prod.yml restart app` |
+| Shell into app | `docker compose -f docker-compose.prod.yml exec app sh` |
+| Prisma migrate | `docker compose -f docker-compose.prod.yml exec app npx prisma db push` |
+| Stop everything | `docker compose -f docker-compose.prod.yml down` (keeps volumes) |
+
+### ⚠️ Production readiness — honest comparison
+
+`docker-compose.prod.yml` spins up **CloudDabba + PostgreSQL + Redis** and exposes the panel on port 6050. For most PaaS features you will need more. Here's what works out of the box and what doesn't:
+
+| Feature | VPS install (`install.sh`) | Docker Compose (`docker-compose.prod.yml`) |
+|---------|:--:|:--:|
+| Admin panel, users, API, GitHub integration | ✅ | ✅ |
+| Deploy user apps as containers (via docker.sock) | ✅ | ✅ |
+| Per-project PostgreSQL | ✅ | ✅ |
+| Per-project Redis | ✅ | ✅ |
+| Per-project MariaDB | ✅ | ❌ (no MariaDB service in compose) |
+| HTTPS / Let's Encrypt for the panel itself | ✅ | ❌ (port 6050 HTTP only) |
+| `*.yourdomain.com` subdomains for deployed apps | ✅ | ❌ (no host NGINX access from container) |
+| Automatic SSL for custom domains on deployed apps | ✅ | ❌ (needs Traefik/Caddy layer) |
+| One-command updates with health check | ✅ (`update.sh`) | ✅ (`docker compose up -d --build`) |
+
+**Bottom line:**
+
+- **Use Docker Compose** if you're doing a single-instance deployment where all apps are accessed via `http://YOUR_IP:PORT` and you don't need auto-SSL or subdomain routing. Great for homelab, internal tools, evaluation, and dev/staging environments.
+- **Use `install.sh`** if you want the full Vercel/Railway experience — custom domains with auto-SSL, wildcard subdomains, platform-managed NGINX, MariaDB provisioning. This is the recommended path for serving real users.
+
+### Turning the Docker setup into full production
+
+To close the gaps above:
+
+1. **Add MariaDB service** — append a `mariadb` block to `docker-compose.prod.yml` and set `MARIADB_HOST=mariadb` in the app env.
+2. **Add a reverse proxy** — run **Traefik** or **Caddy** in front of the `app` service to terminate TLS and route `*.yourdomain.com` to the app. This replaces the platform's NGINX auto-config.
+3. **Expose Docker socket safely** — the compose file already mounts `/var/run/docker.sock`; keep that host-level and don't expose the app service externally without a proxy.
+4. **Persistent certs** — mount a volume for the proxy's cert store so `docker compose up -d --build` doesn't trigger a fresh Let's Encrypt issuance every time.
+
+A `docker-compose.full.yml` with Traefik + MariaDB bundled isn't included yet — if you need it, open an issue.
 
 ---
 
