@@ -1,2 +1,48 @@
+# Auto-normalize line endings for all text files
+* text=auto eol=lf
+
+# Shell scripts — MUST be LF or they won't run on Linux
+*.sh text eol=lf
+
+# Source code — LF everywhere for cross-platform consistency
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.jsx     text eol=lf
+*.mjs     text eol=lf
+*.cjs     text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.md      text eol=lf
+*.prisma  text eol=lf
+*.conf    text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.sql     text eol=lf
+*.env     text eol=lf
+Dockerfile text eol=lf
+
+# Specific files that must never have CRLF
 backend/src/infrastructure/docker/templates/fullstack-start.sh text eol=lf
 backend/src/infrastructure/docker/templates/fullstack-nginx.conf text eol=lf
+install.sh   text eol=lf
+update.sh    text eol=lf
+uninstall.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Binary — never touch
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.svg   binary
+*.zip   binary
+*.tar   binary
+*.tar.gz binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
