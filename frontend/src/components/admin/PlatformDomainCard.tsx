@@ -491,7 +491,7 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
                         <p className={`text-sm font-medium ${s.skipped ? 'text-slate-400' : s.ok ? 'text-green-400' : 'text-red-400'}`}>
                           {s.name}{s.skipped ? ' (skipped)' : ''}
                         </p>
-                        {s.detail && <p className="text-xs text-slate-500 mt-0.5 break-words">{s.detail}</p>}
+                        {s.detail && <pre className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words font-sans">{s.detail}</pre>}
                       </div>
                     </div>
                   ))}
@@ -596,7 +596,7 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
                       {s.ok ? <Check className="h-4 w-4 text-green-400 mt-0.5 shrink-0" /> : <X className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />}
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm font-medium ${s.ok ? 'text-green-400' : 'text-red-400'}`}>{s.name}</p>
-                        {s.detail && <p className="text-xs text-slate-500 mt-0.5 break-words">{s.detail}</p>}
+                        {s.detail && <pre className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words font-sans">{s.detail}</pre>}
                       </div>
                     </div>
                   ))}

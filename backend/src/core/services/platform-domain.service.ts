@@ -266,18 +266,28 @@ export class PlatformDomainService {
       const lastLines = stdout.split('\n').slice(-6).join(' | ').slice(0, 300);
       steps.push({ name: 'Certbot issued certificate', ok: true, detail: lastLines });
     } catch (e: any) {
-      const msg = (e.stderr || e.stdout || e.message || '').toString();
+      let msg = (e.stderr || e.stdout || e.message || '').toString();
+
+      // Tail the real log file — certbot often writes useful error to it, not stdout/stderr
+      try {
+        const { stdout: logTail } = await execFileAsync('sudo', ['tail', '-40', '/var/log/letsencrypt/letsencrypt.log'], { timeout: 5000 });
+        const lines = logTail.split('\n');
+        const errorLines = lines.filter((l) => /error|fail|detail:|problem/i.test(l)).slice(-8);
+        if (errorLines.length) msg += '\n\nFrom letsencrypt.log:\n' + errorLines.join('\n');
+      } catch {}
+
       let hint = '';
-      if (/rate limit/i.test(msg)) hint = 'Let\'s Encrypt rate limit — wait ~1 hour.';
-      else if (/not reachable|connection refused|port 80/i.test(msg)) hint = 'Port 80 must be open and NGINX running.';
-      else if (/timeout|timed out/i.test(msg)) hint = 'DNS may still be propagating — retry in a few minutes.';
+      if (/rate limit|too many/i.test(msg)) hint = 'Let\'s Encrypt rate limit — wait ~1 hour before retrying.';
+      else if (/connection refused|timeout.*:80|port 80|Fetching.*:80.*(timed out|refused)/i.test(msg)) hint = 'Port 80 unreachable from the internet. Check AWS Security Group / UFW / NGINX.';
+      else if (/NXDOMAIN|DNS problem|no.*A.*record/i.test(msg)) hint = 'DNS A record not pointing here or not propagated.';
+      else if (/unauthorized|challenge.*fail/i.test(msg)) hint = 'HTTP-01 challenge failed — usually port 80 firewall or NGINX .well-known path issue.';
 
       steps.push({
         name: 'Certbot issued certificate',
         ok: false,
-        detail: `${hint ? hint + ' — ' : ''}${msg.slice(0, 400)}`,
+        detail: `${hint ? hint + '\n\n' : ''}${msg.slice(0, 1500)}`,
       });
-      return { ok: false, steps, domain, error: 'Certbot failed' };
+      return { ok: false, steps, domain, error: hint || 'Certbot failed — check /var/log/letsencrypt/letsencrypt.log for details' };
     }
 
     logger.info(`SSL installed for ${domain} by admin`);
