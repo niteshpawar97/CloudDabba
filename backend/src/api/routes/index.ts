@@ -59,16 +59,19 @@ router.get('/health', async (_req, res) => {
 
 // Public config (domain info for frontend)
 router.get('/config', async (_req, res) => {
-  const { config } = require('../../shared/config/app.config');
+  const { PlatformConfig } = require('../../core/services/platform-config.service');
   let setupCompleted = false;
   try {
     const { SetupService } = require('../../core/services/setup.service');
     setupCompleted = await SetupService.isSetupComplete();
   } catch {}
+  const s = await PlatformConfig.settings();
   res.json({
     success: true,
     data: {
-      baseDomain: config.domain.base,
+      baseDomain: s.baseDomain,
+      platformName: s.platformName,
+      allowSignup: s.allowSignup,
       protocol: process.env.NODE_ENV === 'production' ? 'https' : 'http',
       setupCompleted,
     },

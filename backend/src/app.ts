@@ -11,6 +11,7 @@ import { subdomainProxy } from './core/middleware/subdomain-proxy.middleware';
 import routes from './api/routes';
 import webhookRoutes from './api/routes/webhook.routes';
 import { setupGuard } from './core/middleware/setup-guard.middleware';
+import { PlatformConfig } from './core/services/platform-config.service';
 
 const app = express();
 
@@ -29,7 +30,19 @@ app.use(helmet({
     },
   },
 }));
-app.use(cors({ origin: config.cors.origin, credentials: true }));
+app.use(cors({
+  origin: async (origin, cb) => {
+    if (!origin) return cb(null, true);
+    try {
+      const allowed = await PlatformConfig.getCorsOrigins();
+      if (allowed.length === 0) return cb(null, true);
+      return cb(null, allowed.includes(origin));
+    } catch {
+      return cb(null, (config.cors.origin || []).includes(origin));
+    }
+  },
+  credentials: true,
+}));
 
 // Parsing
 app.use(express.json({ limit: '10mb' }));

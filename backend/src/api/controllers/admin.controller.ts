@@ -354,6 +354,8 @@ export class AdminController {
 
       const { SetupService } = require('../../core/services/setup.service');
       SetupService.invalidateCache();
+      const { PlatformConfig } = require('../../core/services/platform-config.service');
+      PlatformConfig.invalidate();
 
       sendSuccess(res, row, 'Settings updated');
     } catch (error) {

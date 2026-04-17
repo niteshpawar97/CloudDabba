@@ -7,6 +7,15 @@ import { encrypt, decrypt } from './encryption.service';
 
 export class AuthService {
   static async signup(name: string, email: string, password: string) {
+    const { PlatformConfig } = require('./platform-config.service');
+    const allowed = await PlatformConfig.isSignupAllowed();
+    if (!allowed) {
+      const userCount = await prisma.user.count();
+      if (userCount > 0) {
+        throw new AppError('Public signup is disabled. Please contact the administrator.', 403);
+      }
+    }
+
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new AppError('Email already registered', 409);

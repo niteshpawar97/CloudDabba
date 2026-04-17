@@ -99,9 +99,11 @@ export class SourceController {
         } catch {}
       }
 
+      const { PlatformConfig } = require('../../core/services/platform-config.service');
+      const defaultBranch = await PlatformConfig.getDefaultBranch();
       sendSuccess(res, {
         repoUrl: repoUrl.endsWith('.git') ? repoUrl : `${repoUrl}.git`,
-        branch: branch || 'main',
+        branch: branch || defaultBranch,
         detection,
       });
     } catch (error) {

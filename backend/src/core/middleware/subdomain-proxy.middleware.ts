@@ -2,10 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import prisma from '../../database/connection';
 import { config } from '../../shared/config/app.config';
+import { PlatformConfig } from '../services/platform-config.service';
 import logger from '../../shared/utils/logger';
 
-function sendErrorPage(res: Response, statusCode: number, title: string, message: string, subdomain: string) {
-  const baseDomain = config.domain.base;
+async function sendErrorPage(res: Response, statusCode: number, title: string, message: string, subdomain: string) {
+  const baseDomain = await PlatformConfig.getBaseDomain();
   res.status(statusCode).send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -139,7 +140,7 @@ function sendErrorPage(res: Response, statusCode: number, title: string, message
 
 export async function subdomainProxy(req: Request, res: Response, next: NextFunction) {
   const host = req.hostname || req.headers.host?.split(':')[0] || '';
-  const baseDomain = config.domain.base;
+  const baseDomain = await PlatformConfig.getBaseDomain();
 
   let subdomain = '';
   let isCustomDomain = false;
@@ -210,7 +211,7 @@ export async function subdomainProxy(req: Request, res: Response, next: NextFunc
 
     proxyReq.on('error', (err) => {
       logger.error(`Proxy error for ${displayName}: ${err.message}`);
-      sendErrorPage(res, 502, 'App Unavailable',
+      void sendErrorPage(res, 502, 'App Unavailable',
         'The application is not responding. It may have crashed or is still starting up.', displayName);
     });
 

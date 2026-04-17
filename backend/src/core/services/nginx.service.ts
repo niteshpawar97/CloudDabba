@@ -93,10 +93,11 @@ async function sudoDeleteFile(filePath: string) {
 export class NginxService {
   static async generateConfig(subdomain: string, port: number) {
     try {
+      const { PlatformConfig } = require('./platform-config.service');
       const configContent = ejs.render(SUBDOMAIN_TEMPLATE, {
         subdomain,
         port,
-        baseDomain: config.domain.base,
+        baseDomain: await PlatformConfig.getBaseDomain(),
       });
 
       const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
@@ -115,17 +116,19 @@ export class NginxService {
    */
   static async generateRedirectConfig(subdomain: string, customDomain: string) {
     try {
+      const { PlatformConfig } = require('./platform-config.service');
+      const baseDomain = await PlatformConfig.getBaseDomain();
       const scheme = process.env.NODE_ENV === 'production' ? 'https' : 'http';
       const configContent = ejs.render(SUBDOMAIN_REDIRECT_TEMPLATE, {
         subdomain,
-        baseDomain: config.domain.base,
+        baseDomain,
         customDomain,
         scheme,
       });
 
       const configPath = path.join(config.nginx.sitesPath, `${subdomain}.conf`);
       await sudoWriteFile(configPath, configContent);
-      logger.info(`NGINX redirect config: ${subdomain}.${config.domain.base} → ${customDomain}`);
+      logger.info(`NGINX redirect config: ${subdomain}.${baseDomain} → ${customDomain}`);
 
       await this.reload();
     } catch (error: any) {
