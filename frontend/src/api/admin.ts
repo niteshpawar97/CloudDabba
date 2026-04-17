@@ -112,6 +112,23 @@ export const changeDomain = (data: { domain: string; sslEmail?: string; skipDns?
 export const installSsl = (data: { domain: string; email?: string; includeWww?: boolean }) =>
   client.post<{ data: DomainChangeResult }>('/admin/install-ssl', data).then((r) => r.data.data);
 
+export interface CloudflareStatus {
+  tokenConfigured: boolean;
+  pluginInstalled: boolean;
+  iniExists: boolean;
+}
+export const getCloudflareStatus = () =>
+  client.get<{ data: CloudflareStatus }>('/admin/cloudflare/status').then((r) => r.data.data);
+
+export const saveCloudflareToken = (token: string) =>
+  client.post('/admin/cloudflare/token', { token });
+
+export const removeCloudflareToken = () =>
+  client.delete('/admin/cloudflare/token');
+
+export const installWildcardSsl = (data: { domain: string; email?: string }) =>
+  client.post<{ data: DomainChangeResult }>('/admin/install-wildcard-ssl', data).then((r) => r.data.data);
+
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
 

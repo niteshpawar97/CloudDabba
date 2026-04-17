@@ -415,6 +415,46 @@ export class AdminController {
     }
   }
 
+  static async getCloudflareStatus(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { CloudflareSslService } = require('../../core/services/cloudflare-ssl.service');
+      sendSuccess(res, await CloudflareSslService.getStatus());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async saveCloudflareToken(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { CloudflareSslService } = require('../../core/services/cloudflare-ssl.service');
+      await CloudflareSslService.saveToken(req.body.token);
+      sendSuccess(res, { saved: true }, 'Cloudflare token saved (encrypted)');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async removeCloudflareToken(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { CloudflareSslService } = require('../../core/services/cloudflare-ssl.service');
+      await CloudflareSslService.removeToken();
+      sendSuccess(res, { removed: true }, 'Cloudflare token removed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async installWildcardSsl(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { CloudflareSslService } = require('../../core/services/cloudflare-ssl.service');
+      const { domain, email } = req.body;
+      const result = await CloudflareSslService.installWildcard({ domain, email });
+      sendSuccess(res, result, result.ok ? 'Wildcard SSL installed' : 'Wildcard SSL failed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getPortRangeStatus(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');

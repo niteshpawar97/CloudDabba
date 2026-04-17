@@ -135,6 +135,7 @@ model PlatformSettings {
   allowSignup    Boolean   @default(true) @map("allow_signup")
   sslEmail       String?   @map("ssl_email") @db.VarChar(255)
   defaultBranch  String    @default("main") @map("default_branch") @db.VarChar(100)
+  cloudflareApiTokenEnc String? @map("cloudflare_api_token_enc") @db.Text
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 

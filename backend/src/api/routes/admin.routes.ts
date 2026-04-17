@@ -45,6 +45,12 @@ router.get('/port-range-status', AdminController.getPortRangeStatus);
 router.post('/change-domain', AdminController.changeDomain);
 router.post('/install-ssl', AdminController.installSsl);
 
+// Cloudflare wildcard SSL
+router.get('/cloudflare/status', AdminController.getCloudflareStatus);
+router.post('/cloudflare/token', AdminController.saveCloudflareToken);
+router.delete('/cloudflare/token', AdminController.removeCloudflareToken);
+router.post('/install-wildcard-ssl', AdminController.installWildcardSsl);
+
 // Changelog
 router.get('/changelog', AdminController.getChangelog);
 

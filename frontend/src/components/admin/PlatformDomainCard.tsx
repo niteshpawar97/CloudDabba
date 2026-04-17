@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, changeDomain, installSsl, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo, DomainChangeResult } from '../../api/admin';
+import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, changeDomain, installSsl, getCloudflareStatus, saveCloudflareToken, removeCloudflareToken, installWildcardSsl, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo, DomainChangeResult, CloudflareStatus } from '../../api/admin';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Spinner } from '../ui/Spinner';
-import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock, ArrowRightCircle, ExternalLink, Download } from 'lucide-react';
+import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock, ArrowRightCircle, ExternalLink, Download, Cloud, Trash2, Save } from 'lucide-react';
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -99,6 +99,55 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
   const [includeWww, setIncludeWww] = useState(true);
   const [sslInstalling, setSslInstalling] = useState(false);
   const [sslResult, setSslResult] = useState<DomainChangeResult | null>(null);
+
+  const [cfStatus, setCfStatus] = useState<CloudflareStatus | null>(null);
+  const [cfToken, setCfToken] = useState('');
+  const [cfSaving, setCfSaving] = useState(false);
+  const [wildcardOpen, setWildcardOpen] = useState(false);
+  const [wildcardEmail, setWildcardEmail] = useState('');
+  const [wildcardInstalling, setWildcardInstalling] = useState(false);
+  const [wildcardResult, setWildcardResult] = useState<DomainChangeResult | null>(null);
+
+  useEffect(() => {
+    getCloudflareStatus().then(setCfStatus).catch(() => {});
+  }, []);
+
+  const saveToken = async () => {
+    if (!cfToken.trim()) return;
+    setCfSaving(true);
+    try {
+      await saveCloudflareToken(cfToken.trim());
+      setCfToken('');
+      setCfStatus(await getCloudflareStatus());
+    } finally {
+      setCfSaving(false);
+    }
+  };
+
+  const removeToken = async () => {
+    if (!confirm('Remove Cloudflare API token? Existing certificates will keep working, but auto-renewal and future wildcard issuance will stop.')) return;
+    setCfSaving(true);
+    try {
+      await removeCloudflareToken();
+      setCfStatus(await getCloudflareStatus());
+    } finally {
+      setCfSaving(false);
+    }
+  };
+
+  const runInstallWildcard = async () => {
+    setWildcardInstalling(true);
+    setWildcardResult(null);
+    try {
+      const r = await installWildcardSsl({ domain, email: wildcardEmail || undefined });
+      setWildcardResult(r);
+      if (r.ok) setSsl(await getSslStatus(domain));
+    } catch (e: any) {
+      setWildcardResult({ ok: false, steps: [], domain, error: e.response?.data?.message || e.message || 'Request failed' });
+    } finally {
+      setWildcardInstalling(false);
+    }
+  };
 
   const runInstallSsl = async () => {
     setSslInstalling(true);
@@ -348,6 +397,78 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
         )}
       </div>
 
+      {/* Cloudflare wildcard SSL */}
+      <div className="border-t border-white/[0.06] pt-4">
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white flex items-center gap-2">
+              <Cloud className="h-4 w-4 text-sky-400" /> Wildcard SSL via Cloudflare
+            </p>
+            <p className="text-xs text-slate-500">
+              Wildcard cert (<code className="text-blue-400">*.{domain || 'yourdomain'}</code>) for deployed apps to get HTTPS subdomains automatically.
+              Requires DNS hosted on Cloudflare and a scoped API token (Zone:DNS:Edit, Zone:Zone:Read).
+            </p>
+          </div>
+          {cfStatus?.tokenConfigured && (
+            <Button
+              size="sm"
+              onClick={() => { setWildcardEmail(''); setWildcardOpen(true); setWildcardResult(null); }}
+              disabled={!canTest}
+            >
+              <span className="flex items-center gap-2"><Download className="h-3.5 w-3.5" /> Install Wildcard</span>
+            </Button>
+          )}
+        </div>
+
+        {cfStatus && (
+          <div className="bg-[#0a0e14] rounded-lg p-3 text-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Cloudflare API token</span>
+              <span className={cfStatus.tokenConfigured ? 'text-green-400' : 'text-amber-400'}>
+                {cfStatus.tokenConfigured ? '✓ Saved (encrypted)' : '— Not set'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">certbot-dns-cloudflare plugin</span>
+              <span className={cfStatus.pluginInstalled ? 'text-green-400' : 'text-amber-400'}>
+                {cfStatus.pluginInstalled ? '✓ Installed' : '— Will install on first use'}
+              </span>
+            </div>
+
+            {!cfStatus.tokenConfigured ? (
+              <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                <p className="text-xs text-slate-400">
+                  Create a scoped token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">dash.cloudflare.com/profile/api-tokens</a> — permissions: <strong>Zone → DNS → Edit</strong> + <strong>Zone → Zone → Read</strong> for your domain.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={cfToken}
+                    onChange={(e) => setCfToken(e.target.value)}
+                    placeholder="Paste Cloudflare API token"
+                    className="flex-1 px-3 py-2 rounded-lg text-slate-200 placeholder-slate-500 bg-[#0f1218] border border-white/[0.06] font-mono text-xs focus:outline-none focus:border-sky-500/40"
+                    disabled={cfSaving}
+                  />
+                  <Button size="sm" onClick={saveToken} loading={cfSaving} disabled={!cfToken.trim()}>
+                    <span className="flex items-center gap-2"><Save className="h-3.5 w-3.5" /> Save</span>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="pt-2 border-t border-white/[0.06]">
+                <button
+                  onClick={removeToken}
+                  disabled={cfSaving}
+                  className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove token
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Port range */}
       <div className="border-t border-white/[0.06] pt-4">
         <div className="flex items-center justify-between mb-3">
@@ -525,6 +646,97 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
       )}
 
       {/* Install SSL modal */}
+      {/* Wildcard SSL modal */}
+      {wildcardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0e14] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {!wildcardResult ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-sky-500/10">
+                    <Cloud className="h-5 w-5 text-sky-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Install Wildcard SSL</h3>
+                </div>
+                <p className="text-sm text-slate-400 mb-4">
+                  Issues a certificate covering <code className="text-blue-400">{domain}</code> + <code className="text-blue-400">*.{domain}</code> via Cloudflare DNS-01. Auto-renews via the cron job certbot installs.
+                </p>
+
+                <div className="space-y-3 mb-4">
+                  <Input
+                    label="Email (for Let's Encrypt)"
+                    type="email"
+                    value={wildcardEmail}
+                    onChange={(e) => setWildcardEmail(e.target.value)}
+                    placeholder="Leave blank to use SSL Email / Admin Email from settings"
+                    disabled={wildcardInstalling}
+                  />
+                </div>
+
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5 mb-4 space-y-1.5">
+                  <p className="text-xs text-amber-400"><strong>Pre-requisites:</strong></p>
+                  <ul className="text-xs text-amber-300/80 list-disc list-inside space-y-0.5">
+                    <li>Domain's DNS is hosted on Cloudflare (nameservers switched)</li>
+                    <li>API token saved above with Zone:DNS:Edit + Zone:Zone:Read scopes</li>
+                    <li>A and wildcard A records point to this server</li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setWildcardOpen(false)} disabled={wildcardInstalling}>Cancel</Button>
+                  <Button onClick={runInstallWildcard} loading={wildcardInstalling}>
+                    <span className="flex items-center gap-2"><Download className="h-4 w-4" /> Install Now</span>
+                  </Button>
+                </div>
+
+                {wildcardInstalling && (
+                  <div className="mt-4 text-center">
+                    <Spinner size="md" />
+                    <p className="text-xs text-slate-500 mt-2">DNS challenge + issuance... typically 30–90 seconds.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`p-2 rounded-lg ${wildcardResult.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                    {wildcardResult.ok ? <Check className="h-5 w-5 text-green-400" /> : <X className="h-5 w-5 text-red-400" />}
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {wildcardResult.ok ? 'Wildcard SSL Installed' : 'Wildcard SSL Failed'}
+                  </h3>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  {wildcardResult.steps.map((s, i) => (
+                    <div key={i} className="flex items-start gap-2 bg-[#0f1218] rounded-lg px-3 py-2">
+                      {s.skipped ? <AlertTriangle className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" /> : s.ok ? <Check className="h-4 w-4 text-green-400 mt-0.5 shrink-0" /> : <X className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium ${s.skipped ? 'text-slate-400' : s.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {s.name}{s.skipped ? ' (already present)' : ''}
+                        </p>
+                        {s.detail && <pre className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words font-sans">{s.detail}</pre>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {wildcardResult.error && !wildcardResult.ok && (
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2.5 mb-4">
+                    <p className="text-sm text-red-400">{wildcardResult.error}</p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => { setWildcardResult(null); setWildcardInstalling(false); }}>Try Again</Button>
+                  <Button onClick={() => { setWildcardOpen(false); setWildcardResult(null); }}>Close</Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {sslOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-[#0a0e14] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
