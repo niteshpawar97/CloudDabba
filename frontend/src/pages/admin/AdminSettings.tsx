@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users, Check, AlertCircle, RotateCw, Power } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { PlatformDomainCard } from '../../components/admin/PlatformDomainCard';
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
   return (
@@ -189,6 +190,9 @@ export function AdminSettings() {
             className="w-full px-4 py-2.5 rounded-xl text-slate-200 placeholder-slate-500 bg-[#0f1218] border border-white/[0.06] font-mono text-sm focus:outline-none focus:border-blue-500/40"
           />
         </div>
+
+        {/* Platform Domain + SSL + Port Range diagnostics */}
+        <PlatformDomainCard domain={form.baseDomain} />
 
         {/* Save bar */}
         <div className="flex items-center justify-end gap-3 sticky bottom-4 z-10">

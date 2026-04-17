@@ -37,6 +37,12 @@ router.get('/settings', AdminController.getSettings);
 router.patch('/settings', AdminController.updateSettings);
 router.post('/restart', AdminController.restartServer);
 
+// Diagnostics
+router.get('/server-info', AdminController.getServerInfo);
+router.post('/test-dns', AdminController.testDns);
+router.get('/ssl-status', AdminController.getSslStatus);
+router.get('/port-range-status', AdminController.getPortRangeStatus);
+
 // Changelog
 router.get('/changelog', AdminController.getChangelog);
 

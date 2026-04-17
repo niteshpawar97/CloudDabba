@@ -363,6 +363,46 @@ export class AdminController {
     }
   }
 
+  static async getServerInfo(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');
+      const ip = await DomainDiagnosticsService.getServerIp();
+      sendSuccess(res, { ip, panelPort: require('../../shared/config/app.config').config.app.port });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async testDns(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');
+      const result = await DomainDiagnosticsService.testDns(req.body.domain || '');
+      sendSuccess(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getSslStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');
+      const status = await DomainDiagnosticsService.getSslStatus(req.query.domain as string | undefined);
+      sendSuccess(res, status);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getPortRangeStatus(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');
+      const status = await DomainDiagnosticsService.getPortRangeStatus();
+      sendSuccess(res, status);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async restartServer(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const logger = require('../../shared/utils/logger').default;

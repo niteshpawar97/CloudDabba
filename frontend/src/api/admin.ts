@@ -63,6 +63,41 @@ export const updateSettings = (data: Partial<PlatformSettingsResponse['editable'
 export const restartServer = () =>
   client.post<{ data: { scheduled: boolean; delayMs: number } }>('/admin/restart').then((r) => r.data.data);
 
+export interface ServerInfo { ip: string; panelPort: number; }
+export const getServerInfo = () =>
+  client.get<{ data: ServerInfo }>('/admin/server-info').then((r) => r.data.data);
+
+export interface DnsTestResult {
+  ok: boolean;
+  domain?: string;
+  serverIp?: string;
+  apex?: { resolved: string[]; matches: boolean; error?: string };
+  wildcard?: { resolved: string[]; matches: boolean; error?: string };
+  error?: string;
+}
+export const testDns = (domain: string) =>
+  client.post<{ data: DnsTestResult }>('/admin/test-dns', { domain }).then((r) => r.data.data);
+
+export interface SslStatus {
+  installed: boolean;
+  certs: Array<{ name: string; subject?: string; issuer?: string; expiresAt?: string | null; daysLeft?: number | null; sans?: string[]; wildcardCovered?: boolean; error?: string }>;
+  active?: any;
+  error?: string;
+}
+export const getSslStatus = (domain?: string) =>
+  client.get<{ data: SslStatus }>(`/admin/ssl-status${domain ? `?domain=${encodeURIComponent(domain)}` : ''}`).then((r) => r.data.data);
+
+export interface PortRangeStatus {
+  start: number;
+  end: number;
+  total: number;
+  used: number;
+  free: number | null;
+  kernelAvailable: Array<{ port: number; free: boolean }>;
+}
+export const getPortRangeStatus = () =>
+  client.get<{ data: PortRangeStatus }>('/admin/port-range-status').then((r) => r.data.data);
+
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
 
