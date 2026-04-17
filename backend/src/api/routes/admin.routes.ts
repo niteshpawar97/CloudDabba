@@ -43,6 +43,7 @@ router.post('/test-dns', AdminController.testDns);
 router.get('/ssl-status', AdminController.getSslStatus);
 router.get('/port-range-status', AdminController.getPortRangeStatus);
 router.post('/change-domain', AdminController.changeDomain);
+router.post('/install-ssl', AdminController.installSsl);
 
 // Changelog
 router.get('/changelog', AdminController.getChangelog);

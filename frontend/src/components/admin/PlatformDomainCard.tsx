@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, changeDomain, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo, DomainChangeResult } from '../../api/admin';
+import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, changeDomain, installSsl, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo, DomainChangeResult } from '../../api/admin';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Spinner } from '../ui/Spinner';
-import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock, ArrowRightCircle, ExternalLink } from 'lucide-react';
+import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock, ArrowRightCircle, ExternalLink, Download } from 'lucide-react';
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -93,6 +93,26 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
   const [skipSsl, setSkipSsl] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [switchResult, setSwitchResult] = useState<DomainChangeResult | null>(null);
+
+  const [sslOpen, setSslOpen] = useState(false);
+  const [sslEmail, setSslEmail] = useState('');
+  const [includeWww, setIncludeWww] = useState(true);
+  const [sslInstalling, setSslInstalling] = useState(false);
+  const [sslResult, setSslResult] = useState<DomainChangeResult | null>(null);
+
+  const runInstallSsl = async () => {
+    setSslInstalling(true);
+    setSslResult(null);
+    try {
+      const r = await installSsl({ domain, email: sslEmail || undefined, includeWww });
+      setSslResult(r);
+      if (r.ok) setSsl(await getSslStatus(domain));
+    } catch (e: any) {
+      setSslResult({ ok: false, steps: [], domain, error: e.response?.data?.message || e.message || 'Request failed' });
+    } finally {
+      setSslInstalling(false);
+    }
+  };
 
   const runSwitch = async () => {
     setSwitching(true);
@@ -268,26 +288,35 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
               <Shield className="h-4 w-4 text-green-400" /> SSL Certificate
             </p>
             <p className="text-xs text-slate-500">
-              Reads <code className="text-blue-400">/etc/letsencrypt/live/</code> on the server and shows every installed cert — issuer, expiry, days remaining, domains covered, and whether wildcard is included.
-              If nothing is installed, the card shows the exact certbot command to run.
+              Reads <code className="text-blue-400">/etc/letsencrypt/live/</code> on the server and shows every installed cert — issuer, expiry, days remaining, domains covered.
+              Use <strong className="text-slate-300">Install SSL</strong> to run certbot for the current base domain directly from the panel.
             </p>
           </div>
-          <Button size="sm" variant="secondary" onClick={runSsl} loading={checkingSsl}>
-            <span className="flex items-center gap-2"><Play className="h-3.5 w-3.5" /> Check SSL</span>
-          </Button>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="secondary" onClick={runSsl} loading={checkingSsl}>
+              <span className="flex items-center gap-2"><Play className="h-3.5 w-3.5" /> Check</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => { setSslEmail(''); setIncludeWww(true); setSslOpen(true); setSslResult(null); }}
+              disabled={!canTest}
+            >
+              <span className="flex items-center gap-2"><Download className="h-3.5 w-3.5" /> Install SSL</span>
+            </Button>
+          </div>
         </div>
         {ssl && (
           <div className="bg-[#0a0e14] rounded-lg p-3 space-y-3 text-sm">
             {!ssl.installed ? (
               <>
-                <Status ok={false} label="No SSL certificate installed" detail="HTTP only — set up SSL below." />
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2.5">
-                  <p className="text-xs font-semibold text-amber-400 mb-1">Run on your server to install:</p>
-                  <code className="block text-xs text-amber-200 font-mono break-all">
-                    sudo certbot --nginx -d {domain || 'yourdomain.com'} -d *.{domain || 'yourdomain.com'} --email you@email.com --agree-tos --non-interactive
+                <Status ok={false} label="No SSL certificate installed" detail="HTTP only — click Install SSL above to issue one via Let's Encrypt." />
+                <details className="bg-amber-500/5 border border-amber-500/20 rounded px-3 py-2.5">
+                  <summary className="text-xs text-amber-400 cursor-pointer">Or run manually on the server</summary>
+                  <code className="block mt-2 text-xs text-amber-200 font-mono break-all">
+                    sudo certbot --nginx -d {domain || 'yourdomain.com'} --email you@email.com --agree-tos --non-interactive --redirect
                   </code>
                   <p className="text-xs text-slate-500 mt-2">Wildcard requires DNS-01 challenge (different flow) — see Certbot docs.</p>
-                </div>
+                </details>
               </>
             ) : (
               (ssl.certs || []).map((c) => (
@@ -488,6 +517,109 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
                   <Button onClick={() => { setSwitchOpen(false); setSwitchResult(null); if (switchResult.ok) setTimeout(() => window.location.reload(), 200); }}>
                     {switchResult.ok ? 'Reload Page' : 'Close'}
                   </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Install SSL modal */}
+      {sslOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0e14] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {!sslResult ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <Shield className="h-5 w-5 text-green-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Install SSL Certificate</h3>
+                </div>
+                <p className="text-sm text-slate-400 mb-4">
+                  Runs <code className="text-blue-400">certbot --nginx</code> for <strong className="text-slate-300">{domain}</strong> and configures NGINX to redirect HTTP → HTTPS automatically.
+                </p>
+
+                <div className="space-y-3 mb-4">
+                  <Input
+                    label="Email (for Let's Encrypt)"
+                    type="email"
+                    value={sslEmail}
+                    onChange={(e) => setSslEmail(e.target.value)}
+                    placeholder="Leave blank to use SSL Email / Admin Email from settings"
+                    disabled={sslInstalling}
+                  />
+                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked={includeWww} onChange={(e) => setIncludeWww(e.target.checked)} disabled={sslInstalling} />
+                    Also cover <code className="text-blue-400">www.{domain}</code>
+                  </label>
+                </div>
+
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5 mb-4 space-y-1.5">
+                  <p className="text-xs text-amber-400"><strong>Pre-requisites:</strong></p>
+                  <ul className="text-xs text-amber-300/80 list-disc list-inside space-y-0.5">
+                    <li>DNS A record for <code>{domain}</code> must point to this server</li>
+                    <li>Port 80 must be open in cloud firewall (certbot challenges it)</li>
+                    <li>NGINX must be running</li>
+                    <li>Wildcard cert (<code>*.{domain}</code>) is <strong>not</strong> handled — needs DNS-01</li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setSslOpen(false)} disabled={sslInstalling}>Cancel</Button>
+                  <Button onClick={runInstallSsl} loading={sslInstalling}>
+                    <span className="flex items-center gap-2"><Download className="h-4 w-4" /> Install Now</span>
+                  </Button>
+                </div>
+
+                {sslInstalling && (
+                  <div className="mt-4 text-center">
+                    <Spinner size="md" />
+                    <p className="text-xs text-slate-500 mt-2">Running certbot... can take 20–60 seconds.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`p-2 rounded-lg ${sslResult.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                    {sslResult.ok ? <Check className="h-5 w-5 text-green-400" /> : <X className="h-5 w-5 text-red-400" />}
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {sslResult.ok ? 'SSL Installed' : 'SSL Installation Failed'}
+                  </h3>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  {sslResult.steps.map((s, i) => (
+                    <div key={i} className="flex items-start gap-2 bg-[#0f1218] rounded-lg px-3 py-2">
+                      {s.ok ? <Check className="h-4 w-4 text-green-400 mt-0.5 shrink-0" /> : <X className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium ${s.ok ? 'text-green-400' : 'text-red-400'}`}>{s.name}</p>
+                        {s.detail && <p className="text-xs text-slate-500 mt-0.5 break-words">{s.detail}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {sslResult.error && !sslResult.ok && (
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2.5 mb-4">
+                    <p className="text-sm text-red-400">{sslResult.error}</p>
+                  </div>
+                )}
+
+                {sslResult.ok && sslResult.panelUrl && (
+                  <a
+                    href={sslResult.panelUrl}
+                    className="flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2.5 mb-4 text-sm text-green-400 hover:bg-green-500/20 transition"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open {sslResult.panelUrl}
+                  </a>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => { setSslResult(null); setSslInstalling(false); }}>Try Again</Button>
+                  <Button onClick={() => { setSslOpen(false); setSslResult(null); }}>Close</Button>
                 </div>
               </>
             )}

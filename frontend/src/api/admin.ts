@@ -109,6 +109,9 @@ export interface DomainChangeResult {
 export const changeDomain = (data: { domain: string; sslEmail?: string; skipDns?: boolean; skipSsl?: boolean }) =>
   client.post<{ data: DomainChangeResult }>('/admin/change-domain', data).then((r) => r.data.data);
 
+export const installSsl = (data: { domain: string; email?: string; includeWww?: boolean }) =>
+  client.post<{ data: DomainChangeResult }>('/admin/install-ssl', data).then((r) => r.data.data);
+
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
 

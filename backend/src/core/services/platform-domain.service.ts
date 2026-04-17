@@ -221,4 +221,66 @@ export class PlatformDomainService {
     logger.info(`Platform domain changed to ${domain}`);
     return { ok: true, steps, domain, panelUrl };
   }
+
+  static async installSsl(opts: {
+    domain: string;
+    email?: string;
+    includeWww?: boolean;
+  }): Promise<DomainChangeResult> {
+    const steps: DomainChangeStep[] = [];
+    const domain = (opts.domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+    if (!domain || !domain.includes('.') || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
+      return { ok: false, steps, domain, error: 'A valid domain (not IP) is required for SSL' };
+    }
+
+    const email = opts.email || (await PlatformConfig.getSslEmail()) || (await PlatformConfig.getAdminEmail());
+    if (!email) {
+      return { ok: false, steps, domain, error: 'Email required for Let\'s Encrypt — set SSL Email in settings' };
+    }
+
+    // Step 1: DNS sanity check
+    try {
+      const dns = await DomainDiagnosticsService.testDns(domain);
+      if (!dns.apex?.matches) {
+        steps.push({
+          name: 'DNS verification',
+          ok: false,
+          detail: `Apex ${domain} does not resolve to this server. Certbot will fail. Fix DNS first.`,
+        });
+        return { ok: false, steps, domain, error: 'DNS not pointing here' };
+      }
+      steps.push({ name: 'DNS verification', ok: true });
+    } catch (e: any) {
+      steps.push({ name: 'DNS verification', ok: false, detail: e.message });
+      return { ok: false, steps, domain, error: 'DNS check failed' };
+    }
+
+    // Step 2: Run certbot
+    const args = ['certbot', '--nginx', '-d', domain];
+    if (opts.includeWww && !domain.startsWith('www.')) args.push('-d', `www.${domain}`);
+    args.push('--non-interactive', '--agree-tos', '--redirect', '-m', email);
+
+    try {
+      const { stdout } = await execFileAsync('sudo', args, { timeout: 180000 });
+      const lastLines = stdout.split('\n').slice(-6).join(' | ').slice(0, 300);
+      steps.push({ name: 'Certbot issued certificate', ok: true, detail: lastLines });
+    } catch (e: any) {
+      const msg = (e.stderr || e.stdout || e.message || '').toString();
+      let hint = '';
+      if (/rate limit/i.test(msg)) hint = 'Let\'s Encrypt rate limit — wait ~1 hour.';
+      else if (/not reachable|connection refused|port 80/i.test(msg)) hint = 'Port 80 must be open and NGINX running.';
+      else if (/timeout|timed out/i.test(msg)) hint = 'DNS may still be propagating — retry in a few minutes.';
+
+      steps.push({
+        name: 'Certbot issued certificate',
+        ok: false,
+        detail: `${hint ? hint + ' — ' : ''}${msg.slice(0, 400)}`,
+      });
+      return { ok: false, steps, domain, error: 'Certbot failed' };
+    }
+
+    logger.info(`SSL installed for ${domain} by admin`);
+    return { ok: true, steps, domain, panelUrl: `https://${domain}` };
+  }
 }
