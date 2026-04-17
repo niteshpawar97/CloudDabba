@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users, Check, AlertCircle, RotateCw, Power } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { PlatformDomainCard } from '../../components/admin/PlatformDomainCard';
+import { CloudFirewallGuideCard } from '../../components/admin/CloudFirewallGuideCard';
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
   return (
@@ -193,6 +194,9 @@ export function AdminSettings() {
 
         {/* Platform Domain + SSL + Port Range diagnostics */}
         <PlatformDomainCard domain={form.baseDomain} />
+
+        {/* Cloud provider firewall guide */}
+        <CloudFirewallGuideCard />
 
         {/* Save bar */}
         <div className="flex items-center justify-end gap-3 sticky bottom-4 z-10">
