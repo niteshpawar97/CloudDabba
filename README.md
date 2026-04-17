@@ -6,25 +6,135 @@ Deploy GitHub repositories as Docker containers with auto-generated subdomains, 
 
 ## Quick Install
 
-### Option 1: One-Click Install (Ubuntu/Debian VPS)
-
 ```bash
-git clone https://github.com/niteshpawar97/CloudDabba.git
-cd CloudDabba
+curl -fsSL https://raw.githubusercontent.com/niteshpawar97/CloudDabba/master/install.sh -o install.sh
 chmod +x install.sh
-./install.sh
+sudo ./install.sh
 ```
 
-The script installs all dependencies, generates secrets, configures NGINX + SSL, and starts the platform. Open the URL shown at the end to complete setup via the browser wizard.
+The script installs all dependencies, generates secrets, configures NGINX + SSL, and starts the platform. Open the URL shown at the end to complete the first-time setup via the browser wizard.
 
-### Option 2: Docker (Any Linux with Docker)
+> Prefer git clone? `git clone https://github.com/niteshpawar97/CloudDabba.git && cd CloudDabba && chmod +x install.sh && sudo ./install.sh`
+
+---
+
+## Management Scripts
+
+All three scripts share the same visual style — progress bar, step counter, dimmed live output, elapsed time. They run only on Ubuntu/Debian-style VPS and need root (`sudo`).
+
+### `install.sh` — Fresh install
+
+Use on a brand new VPS. 13 steps, ~5–10 minutes end-to-end.
+
+```bash
+sudo ./install.sh
+```
+
+**What it does:**
+
+| Step | Action |
+|------|--------|
+| 1 | Detect OS (Ubuntu/Debian) |
+| 2 | Install dependencies (Node.js 22, Docker, NGINX, PM2, certbot, MariaDB) |
+| 3 | Detect server public IP |
+| 4 | Prompt for domain + admin email (press Enter for IP-only install) |
+| 5 | Generate JWT / encryption / DB / Redis secrets |
+| 6 | Write `backend/.env` |
+| 7 | Start PostgreSQL + Redis containers |
+| 8 | Configure MariaDB — creates `clouddabba_admin` user + writes credentials to `.env` |
+| 9 | Build backend (TypeScript + Prisma) |
+| 10 | Build frontend (Vite) |
+| 11 | Configure NGINX + UFW (opens 80, 443, 6050, 10000–20000) |
+| 12 | Issue SSL certificate via certbot (skipped for IP installs) |
+| 13 | Start PM2 + health check |
+
+Ends with a credentials summary listing the domain, admin email, panel URL, and a reminder to open cloud-provider firewall for the same ports.
+
+### `update.sh` — Update to latest
+
+For operators who don't run their own CI/CD. Safe to re-run (idempotent).
+
+```bash
+sudo ./update.sh                     # default — master branch, full rebuild
+sudo ./update.sh --yes               # non-interactive
+sudo ./update.sh --branch develop    # test a different branch
+sudo ./update.sh --skip-frontend     # backend-only update
+sudo ./update.sh --skip-backend      # frontend-only update
+sudo ./update.sh --skip-prisma       # schema unchanged, skip db push
+sudo ./update.sh --dir /opt/dabba    # explicit install path
+```
+
+**What it does:**
+
+| Step | Action |
+|------|--------|
+| 1 | Pre-flight — detect install dir from PM2 cwd, verify git/node/npm/pm2 |
+| 2 | Stash any local changes, `git fetch + checkout + reset --hard origin/<branch>`, print new commits |
+| 3 | Backend `npm ci` (prefer-offline) |
+| 4 | `prisma generate` + `prisma db push` |
+| 5 | Backend `npm run build` + `dist/` check |
+| 6 | Frontend `npm ci` + build + `dist/index.html` check |
+| 7 | `pm2 restart clouddabba-api --update-env` (fresh start if the process was gone) |
+| 8 | Health check on `/api/v1/health` with retries |
+
+The PM2 restart only happens at the very end, so a failure in any earlier step leaves the previous process running — you never lose the old build.
+
+### `uninstall.sh` — Full cleanup
+
+For fresh reinstalls or decommissioning. Destructive — prompts before each stage by default.
+
+```bash
+sudo ./uninstall.sh                  # interactive, removes everything
+sudo ./uninstall.sh --yes            # non-interactive
+sudo ./uninstall.sh --keep-ssl       # preserve Let's Encrypt certs (reuse on reinstall)
+sudo ./uninstall.sh --keep-mariadb   # leave MariaDB package + data
+sudo ./uninstall.sh --keep-docker    # leave Docker + images alone
+sudo ./uninstall.sh --dir /opt/dabba # explicit install path
+```
+
+**What it removes:**
+
+- PM2 process (`clouddabba-api`)
+- Docker containers (`clouddabba-db`, `clouddabba-redis`, all `clouddabba-app-*`)
+- Docker volumes (`postgres_data`, `redis_data`) + `clouddabba` network + `clouddabba/*` images
+- NGINX configs in `/etc/nginx/sites-enabled/*` (main + per-app)
+- Let's Encrypt certs (separate confirm)
+- MariaDB server + `/var/lib/mysql` + `/etc/mysql`
+- UFW rules allowing Docker bridge → DB ports
+- Install directory (sanity-checked — refuses to delete arbitrary paths)
+
+Docker daemon, Node.js, nginx, and ufw packages are left installed (shared infra).
+
+### Typical workflows
+
+```bash
+# Fresh VPS → production
+sudo ./install.sh
+
+# Existing install → update to latest
+sudo ./update.sh
+
+# Test a feature branch
+sudo ./update.sh --branch feature/xyz
+
+# Nuke and reinstall (same domain → keep SSL)
+sudo ./uninstall.sh --keep-ssl
+sudo ./install.sh
+
+# Fully decommission
+sudo ./uninstall.sh --yes
+```
+
+### Docker-only alternative (no scripts)
+
+If you prefer to skip the VPS-style install entirely:
 
 ```bash
 git clone https://github.com/niteshpawar97/CloudDabba.git
 cd CloudDabba
 cp .env.docker .env
 
-# Generate secrets (replace the CHANGE_ME values in .env)
+# Generate secrets
 sed -i "s/CHANGE_ME_JWT_SECRET/$(openssl rand -base64 48)/g" .env
 sed -i "s/CHANGE_ME_DB_PASSWORD/$(openssl rand -base64 24 | tr -d '/+=')/g" .env
 sed -i "s/CHANGE_ME_REDIS_PASSWORD/$(openssl rand -base64 24 | tr -d '/+=')/g" .env
@@ -33,7 +143,7 @@ sed -i "s/CHANGE_ME_64_CHAR_HEX_STRING/$(openssl rand -hex 32)/g" .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Open `http://YOUR_IP:6050/setup` to complete setup via the wizard.
+Then open `http://YOUR_IP:6050/setup`.
 
 ---
 
@@ -107,7 +217,7 @@ npm run dev            # Runs on http://localhost:5173
 Open http://localhost:5173 and login:
 ```
 Email:    admin@clouddabba.dev
-Password: admin@123
+Password: admin123
 ```
 
 ---
@@ -528,7 +638,9 @@ CloudDabba/
 ├── docker-compose.yml             # Dev (PostgreSQL + Redis)
 ├── docker-compose.prod.yml        # Production (full platform)
 ├── docker-entrypoint.sh           # Docker startup script
-├── install.sh                     # One-click installer
+├── install.sh                     # One-click installer (fresh VPS)
+├── update.sh                      # Update to latest (git pull + rebuild + pm2 restart)
+├── uninstall.sh                   # Full cleanup (containers, volumes, configs, certs)
 ├── ecosystem.config.js            # PM2 config
 └── .env.docker                    # Docker env template
 ```
