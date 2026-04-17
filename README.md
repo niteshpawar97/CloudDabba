@@ -22,6 +22,12 @@ The script installs all dependencies, generates secrets, configures NGINX + SSL,
 
 All three scripts share the same visual style — progress bar, step counter, dimmed live output, elapsed time. They run only on Ubuntu/Debian-style VPS and need root (`sudo`).
 
+> **First time after `git clone` or `git pull`:** make the scripts executable once.
+> ```bash
+> chmod +x install.sh update.sh uninstall.sh
+> ```
+> If you skip this, you'll see `bash: ./<script>.sh: Permission denied`. The `.gitattributes` pins line endings to LF so scripts work on Linux even when committed from Windows, but the Linux execute bit still has to be set locally.
+
 ### `install.sh` — Fresh install
 
 Use on a brand new VPS. 13 steps, ~5–10 minutes end-to-end.
@@ -108,6 +114,9 @@ Docker daemon, Node.js, nginx, and ufw packages are left installed (shared infra
 ### Typical workflows
 
 ```bash
+# One-time after git clone or git pull
+chmod +x install.sh update.sh uninstall.sh
+
 # Fresh VPS → production
 sudo ./install.sh
 
@@ -124,6 +133,15 @@ sudo ./install.sh
 # Fully decommission
 sudo ./uninstall.sh --yes
 ```
+
+### Troubleshooting the scripts
+
+| Error | Fix |
+|-------|-----|
+| `./update.sh: Permission denied` | `chmod +x *.sh` |
+| `sudo: ./update.sh: command not found` | Same — missing execute bit. Run `chmod +x *.sh` or use `sudo bash update.sh` (bash doesn't need the execute bit). |
+| `error: Your local changes to install.sh would be overwritten` | `git checkout install.sh` then `git pull` again. Happens when pulling an older clone made before `.gitattributes` was added — once-only. |
+| `update.sh` says "Not a git repo" | Installed via `curl` one-liner. Clone the repo instead: `git clone ... && cd CloudDabba && sudo ./update.sh`. |
 
 ---
 
