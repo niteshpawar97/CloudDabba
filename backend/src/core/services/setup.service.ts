@@ -3,6 +3,7 @@ import prisma from '../../database/connection';
 import { AuthService } from './auth.service';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
+import { config } from '../../shared/config/app.config';
 
 // In-memory cache for setup status
 let cachedSetupComplete: boolean = false;
@@ -34,13 +35,20 @@ export class SetupService {
   static async getStatus() {
     try {
       const settings = await (prisma as any).platformSettings.findUnique({ where: { id: 'singleton' } });
+      const completed = settings?.setupCompleted ?? false;
       return {
-        setupCompleted: settings?.setupCompleted ?? false,
-        baseDomain: settings?.baseDomain ?? null,
+        setupCompleted: completed,
+        baseDomain: settings?.baseDomain ?? (completed ? null : config.domain.base || null),
+        adminEmail: settings?.adminEmail ?? (completed ? null : config.domain.adminEmail || null),
         installedAt: settings?.installedAt ?? null,
       };
     } catch {
-      return { setupCompleted: false, baseDomain: null, installedAt: null };
+      return {
+        setupCompleted: false,
+        baseDomain: config.domain.base || null,
+        adminEmail: config.domain.adminEmail || null,
+        installedAt: null,
+      };
     }
   }
 

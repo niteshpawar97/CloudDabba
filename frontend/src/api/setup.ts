@@ -2,8 +2,9 @@ import client from './client';
 
 export interface SetupStatus {
   setupCompleted: boolean;
-  baseDomain?: string;
-  installedAt?: string;
+  baseDomain?: string | null;
+  adminEmail?: string | null;
+  installedAt?: string | null;
 }
 
 export const getSetupStatus = () =>

@@ -19,11 +19,15 @@ export function SetupWizard() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [domainLocked, setDomainLocked] = useState(false);
+  const [emailLocked, setEmailLocked] = useState(false);
 
   useEffect(() => {
     getSetupStatus().then((s) => {
-      if (s.setupCompleted) navigate('/', { replace: true });
-      else setLoading(false);
+      if (s.setupCompleted) { navigate('/', { replace: true }); return; }
+      if (s.baseDomain) { setDomain(s.baseDomain); setDomainLocked(true); }
+      if (s.adminEmail) { setEmail(s.adminEmail); setEmailLocked(true); }
+      setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
@@ -102,9 +106,12 @@ export function SetupWizard() {
           {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2"><Globe className="h-5 w-5 text-blue-400" /> Platform Domain</h2>
-              <Input label="Base Domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="clouddabba.yourdomain.com" required />
-              <p className="text-xs text-slate-500">Point this domain (and *.domain) to your server's IP via A record.</p>
-              <Input label="Admin Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" required />
+              <Input label="Base Domain" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="clouddabba.yourdomain.com" required disabled={domainLocked} />
+              <p className="text-xs text-slate-500">
+                {domainLocked ? 'Configured during install — locked for this setup.' : "Point this domain (and *.domain) to your server's IP via A record."}
+              </p>
+              <Input label="Admin Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" required disabled={emailLocked} />
+              {emailLocked && <p className="text-xs text-slate-500">Pre-filled from installer — will be used for admin login.</p>}
               <div className="flex gap-2 pt-2">
                 <Button variant="secondary" onClick={() => setStep(1)}>Back</Button>
                 <Button onClick={() => { if (domain && email) setStep(3); }} className="flex-1" disabled={!domain || !email}>

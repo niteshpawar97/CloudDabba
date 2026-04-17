@@ -19,6 +19,7 @@ export const config = {
   },
   domain: {
     base: process.env.BASE_DOMAIN || 'localhost',
+    adminEmail: process.env.ADMIN_EMAIL || '',
   },
   docker: {
     socketPath: process.env.DOCKER_SOCKET || '/var/run/docker.sock',

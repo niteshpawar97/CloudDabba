@@ -259,6 +259,7 @@ JWT_SECRET=${JWT_SECRET}
 JWT_EXPIRE=7d
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
 BASE_DOMAIN=${DOMAIN}
+ADMIN_EMAIL=${ADMIN_EMAIL}
 DOCKER_SOCKET=/var/run/docker.sock
 NGINX_SITES_PATH=/etc/nginx/sites-enabled
 NGINX_RELOAD_CMD=sudo nginx -s reload
@@ -453,10 +454,15 @@ print_summary() {
   echo ""
   echo -e "  ${W}Platform${N}     ${C}${URL}${N}"
   echo -e "  ${W}Setup${N}        ${C}${URL}/setup${N}"
-  echo -e "  ${W}Admin${N}        ${ADMIN_EMAIL}"
   echo -e "  ${W}Time${N}         $((e/60))m $((e%60))s"
   echo ""
-  echo -e "  ${Y}→ Open the Setup URL in browser to finish configuration${N}"
+  echo -e "  ${BLD}${W}Setup Wizard Credentials${N}"
+  echo -e "  ${D}───────────────────────────────${N}"
+  echo -e "  ${W}Domain${N}       ${DOMAIN}       ${D}(pre-filled, locked)${N}"
+  echo -e "  ${W}Admin Email${N}  ${ADMIN_EMAIL}  ${D}(pre-filled, locked)${N}"
+  echo -e "  ${W}Password${N}     ${Y}you will create in the browser wizard${N}"
+  echo ""
+  echo -e "  ${Y}→ Open the Setup URL in browser and set your admin password${N}"
   echo ""
   echo -e "  ${D}Logs: $LOG_FILE | pm2 logs clouddabba-api${N}"
   echo ""
