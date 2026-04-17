@@ -114,15 +114,36 @@ export class PlatformDomainService {
       steps.push({ name: 'DNS verification', ok: true, skipped: true, detail: isIp ? 'IP address — skipped' : 'Skipped by user' });
     }
 
-    // Step 2: Update DB
+    // Step 2: Update DB (baseDomain, sslEmail, CORS origins)
     try {
+      const existing = await (prisma as any).platformSettings.findUnique({ where: { id: 'singleton' } });
+      const prevBase = existing?.baseDomain || '';
+      const existingOrigins: string[] = (existing?.corsOrigins || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+
+      // Drop stale entries for previous base domain / IP, then add new http+https variants
+      const kept = existingOrigins.filter((o) => !prevBase || !o.includes(prevBase));
+      const newOrigins = Array.from(new Set([...kept, `http://${domain}`, `https://${domain}`]));
+
       await (prisma as any).platformSettings.upsert({
         where: { id: 'singleton' },
-        update: { baseDomain: domain, ...(opts.sslEmail ? { sslEmail: opts.sslEmail } : {}) },
-        create: { id: 'singleton', baseDomain: domain, ...(opts.sslEmail ? { sslEmail: opts.sslEmail } : {}) },
+        update: {
+          baseDomain: domain,
+          corsOrigins: newOrigins.join(','),
+          ...(opts.sslEmail ? { sslEmail: opts.sslEmail } : {}),
+        },
+        create: {
+          id: 'singleton',
+          baseDomain: domain,
+          corsOrigins: newOrigins.join(','),
+          ...(opts.sslEmail ? { sslEmail: opts.sslEmail } : {}),
+        },
       });
       PlatformConfig.invalidate();
-      steps.push({ name: 'Database update', ok: true });
+      steps.push({
+        name: 'Database update',
+        ok: true,
+        detail: `baseDomain + CORS origins updated (${newOrigins.length} allowed)`,
+      });
     } catch (e: any) {
       steps.push({ name: 'Database update', ok: false, detail: e.message });
       return { ok: false, steps, domain, error: 'Failed to save domain to database' };
