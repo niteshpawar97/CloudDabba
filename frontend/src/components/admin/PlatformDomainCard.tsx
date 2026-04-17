@@ -217,7 +217,10 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold text-white">DNS Verification</p>
-            <p className="text-xs text-slate-500">Checks that <code className="text-blue-400">{domain || '(domain)'}</code> resolves to your server.</p>
+            <p className="text-xs text-slate-500">
+              Resolves <code className="text-blue-400">{domain || '(domain)'}</code> and a throwaway subdomain, then compares the answers to this server's public IP.
+              Apex must match for the panel to load on your domain; wildcard must match for deployed apps to get subdomains automatically.
+            </p>
           </div>
           <Button size="sm" variant="secondary" onClick={runDns} loading={testingDns} disabled={!canTest}>
             <span className="flex items-center gap-2"><Play className="h-3.5 w-3.5" /> Test DNS</span>
@@ -264,7 +267,10 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
             <p className="text-sm font-semibold text-white flex items-center gap-2">
               <Shield className="h-4 w-4 text-green-400" /> SSL Certificate
             </p>
-            <p className="text-xs text-slate-500">Lets Encrypt cert installed on this server.</p>
+            <p className="text-xs text-slate-500">
+              Reads <code className="text-blue-400">/etc/letsencrypt/live/</code> on the server and shows every installed cert — issuer, expiry, days remaining, domains covered, and whether wildcard is included.
+              If nothing is installed, the card shows the exact certbot command to run.
+            </p>
           </div>
           <Button size="sm" variant="secondary" onClick={runSsl} loading={checkingSsl}>
             <span className="flex items-center gap-2"><Play className="h-3.5 w-3.5" /> Check SSL</span>
@@ -320,7 +326,9 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
             <p className="text-sm font-semibold text-white flex items-center gap-2">
               <Server className="h-4 w-4 text-purple-400" /> Container Port Range
             </p>
-            <p className="text-xs text-slate-500">Ports used for deployed app containers.</p>
+            <p className="text-xs text-slate-500">
+              Every deployed app binds to one port in this range. Uses <code className="text-blue-400">ss -tln</code> for the in-use count, then runs a live kernel bind test on the first five ports to confirm they're actually free (ports can be "not listed" but still reserved by something).
+            </p>
           </div>
           <Button size="sm" variant="secondary" onClick={runPorts} loading={checkingPorts}>
             <span className="flex items-center gap-2"><Play className="h-3.5 w-3.5" /> Test Ports</span>
