@@ -34,6 +34,7 @@ router.post('/images/cleanup', AdminController.cleanupImages);
 
 // Settings
 router.get('/settings', AdminController.getSettings);
+router.patch('/settings', AdminController.updateSettings);
 
 // Changelog
 router.get('/changelog', AdminController.getChangelog);

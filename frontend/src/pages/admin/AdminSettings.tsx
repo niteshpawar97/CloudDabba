@@ -1,12 +1,32 @@
 import { useState, useEffect } from 'react';
-import { getSettings } from '../../api/admin';
+import { getSettings, updateSettings, PlatformSettingsResponse } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
-import { Settings, Globe, Server, Shield, Terminal } from 'lucide-react';
+import { Input } from '../../components/ui/Input';
+import { Button } from '../../components/ui/Button';
+import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users, Check, AlertCircle } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
-function SettingRow({ icon: Icon, label, value, color = 'text-slate-300' }: { icon: any; label: string; value: string; color?: string }) {
+function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/[0.04] last:border-0">
+    <div className="flex items-start justify-between gap-4 py-3">
+      <div>
+        <p className="text-sm font-medium text-slate-200">{label}</p>
+        {desc && <p className="text-xs text-slate-500 mt-0.5">{desc}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-blue-500' : 'bg-white/10'}`}
+      >
+        <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform m-0.5 ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+      </button>
+    </div>
+  );
+}
+
+function InfraRow({ icon: Icon, label, value, color = 'text-slate-300' }: { icon: any; label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
       <div className="flex items-center gap-3">
         <Icon className="h-4 w-4 text-slate-500" />
         <span className="text-sm text-slate-400">{label}</span>
@@ -18,49 +38,141 @@ function SettingRow({ icon: Icon, label, value, color = 'text-slate-300' }: { ic
 
 export function AdminSettings() {
   usePageTitle('Admin - Settings');
-  const [settings, setSettings] = useState<any>(null);
+  const [data, setData] = useState<PlatformSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+
+  const [form, setForm] = useState({
+    platformName: '',
+    baseDomain: '',
+    adminEmail: '',
+    sslEmail: '',
+    corsOrigins: '',
+    allowSignup: true,
+    defaultBranch: 'main',
+  });
 
   useEffect(() => {
-    getSettings().then(setSettings).catch(() => {}).finally(() => setLoading(false));
+    getSettings()
+      .then((d) => {
+        setData(d);
+        setForm(d.editable);
+      })
+      .catch(() => setToast({ kind: 'err', msg: 'Failed to load settings' }))
+      .finally(() => setLoading(false));
   }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setToast(null);
+    try {
+      await updateSettings(form);
+      setToast({ kind: 'ok', msg: 'Settings saved' });
+      const fresh = await getSettings();
+      setData(fresh);
+      setForm(fresh.editable);
+    } catch (e: any) {
+      setToast({ kind: 'err', msg: e.response?.data?.message || 'Save failed' });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setToast(null), 3000);
+    }
+  };
 
   if (loading) return <Spinner size="lg" />;
 
+  const dirty = data && JSON.stringify(form) !== JSON.stringify(data.editable);
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-white mb-8">Platform Settings</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
+        {dirty && <span className="text-xs text-amber-400">● Unsaved changes</span>}
+      </div>
+
+      {toast && (
+        <div className={`mb-6 max-w-2xl flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${
+          toast.kind === 'ok' ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'
+        }`}>
+          {toast.kind === 'ok' ? <Check className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+          {toast.msg}
+        </div>
+      )}
 
       <div className="max-w-2xl space-y-6">
+        {/* Editable: Platform */}
         <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Settings className="h-5 w-5 text-blue-400" /> General
           </h2>
-          <SettingRow icon={Globe} label="Base Domain" value={settings?.domain || '—'} color="text-blue-400" />
-          <SettingRow icon={Server} label="Port" value={settings?.port?.toString() || '—'} />
-          <SettingRow icon={Shield} label="Environment" value={settings?.environment || '—'} color={settings?.environment === 'production' ? 'text-green-400' : 'text-amber-400'} />
-          <SettingRow icon={Terminal} label="Container Port Range" value={settings?.portRange || '—'} />
-        </div>
-
-        <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-400" /> CORS Origins
-          </h2>
-          <div className="space-y-2">
-            {settings?.corsOrigin?.map((origin: string, i: number) => (
-              <div key={i} className="px-3 py-2 rounded bg-white/[0.03] text-sm font-mono text-slate-300">
-                {origin}
-              </div>
-            )) || <p className="text-slate-500 text-sm">No CORS origins configured</p>}
+          <div className="space-y-4">
+            <Input label="Platform Name" value={form.platformName} onChange={(e) => setForm({ ...form, platformName: e.target.value })} placeholder="CloudDabba" />
+            <Input label="Base Domain" value={form.baseDomain} onChange={(e) => setForm({ ...form, baseDomain: e.target.value })} placeholder="clouddabba.yourdomain.com" />
+            <Input label="Admin Email" type="email" value={form.adminEmail} onChange={(e) => setForm({ ...form, adminEmail: e.target.value })} placeholder="you@email.com" />
+            <Input label="SSL / Let's Encrypt Email" type="email" value={form.sslEmail} onChange={(e) => setForm({ ...form, sslEmail: e.target.value })} placeholder="ssl@yourdomain.com" />
+            <div>
+              <Input label="Default Git Branch" value={form.defaultBranch} onChange={(e) => setForm({ ...form, defaultBranch: e.target.value })} placeholder="main" />
+              <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1.5">
+                <GitBranch className="h-3 w-3" /> Used when users create new projects
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-amber-400 mb-2">Configuration</h2>
-          <p className="text-sm text-slate-400">
-            Platform settings are configured via the <code className="bg-white/5 px-2 py-0.5 rounded text-blue-400">.env</code> file on the server.
-            Changes require a restart: <code className="bg-white/5 px-2 py-0.5 rounded text-blue-400">pm2 restart clouddabba-api</code>
-          </p>
+        {/* Editable: Access */}
+        <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+            <Users className="h-5 w-5 text-purple-400" /> Access Control
+          </h2>
+          <Toggle
+            checked={form.allowSignup}
+            onChange={(v) => setForm({ ...form, allowSignup: v })}
+            label="Allow User Signup"
+            desc="When disabled, only the admin can invite users"
+          />
+        </div>
+
+        {/* Editable: CORS */}
+        <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-green-400" /> CORS Origins
+          </h2>
+          <p className="text-xs text-slate-500 mb-3">Comma-separated origins that can call the API. Leave blank to use the .env default.</p>
+          <textarea
+            value={form.corsOrigins}
+            onChange={(e) => setForm({ ...form, corsOrigins: e.target.value })}
+            placeholder="https://clouddabba.com, https://app.clouddabba.com"
+            rows={3}
+            className="w-full px-4 py-2.5 rounded-xl text-slate-200 placeholder-slate-500 bg-[#0f1218] border border-white/[0.06] font-mono text-sm focus:outline-none focus:border-blue-500/40"
+          />
+        </div>
+
+        {/* Save bar */}
+        <div className="flex items-center justify-end gap-3 sticky bottom-4 z-10">
+          <Button
+            variant="secondary"
+            onClick={() => data && setForm(data.editable)}
+            disabled={!dirty || saving}
+          >
+            Discard
+          </Button>
+          <Button onClick={save} loading={saving} disabled={!dirty}>
+            <span className="flex items-center gap-2"><Save className="h-4 w-4" /> Save Changes</span>
+          </Button>
+        </div>
+
+        {/* Read-only: Infrastructure */}
+        <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+            <Server className="h-5 w-5 text-amber-400" /> Infrastructure
+          </h2>
+          <p className="text-xs text-slate-500 mb-4">Configured in <code className="text-blue-400">.env</code> — restart required to change.</p>
+          <InfraRow icon={Terminal} label="API Port" value={data?.infrastructure.port?.toString() || '—'} />
+          <InfraRow icon={Shield} label="Environment" value={data?.infrastructure.environment || '—'} color={data?.infrastructure.environment === 'production' ? 'text-green-400' : 'text-amber-400'} />
+          <InfraRow icon={Globe} label="Container Port Range" value={data?.infrastructure.portRange || '—'} />
+          <InfraRow icon={Mail} label="SSL Enabled" value={data?.sslEnabled ? 'Yes' : 'No'} color={data?.sslEnabled ? 'text-green-400' : 'text-slate-500'} />
+          {data?.installedAt && <InfraRow icon={Server} label="Installed" value={new Date(data.installedAt).toLocaleString()} />}
         </div>
       </div>
     </div>

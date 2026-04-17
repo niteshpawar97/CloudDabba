@@ -33,8 +33,32 @@ export const removeContainer = (id: string) =>
 export const cleanupContainers = () =>
   client.post<{ data: { removed: number } }>('/admin/containers/cleanup').then((r) => r.data.data);
 
+export interface PlatformSettingsResponse {
+  editable: {
+    platformName: string;
+    baseDomain: string;
+    adminEmail: string;
+    sslEmail: string;
+    corsOrigins: string;
+    allowSignup: boolean;
+    defaultBranch: string;
+  };
+  infrastructure: {
+    port: number;
+    environment: string;
+    portRange: string;
+    nginxSitesPath: string;
+    dockerSocket: string;
+  };
+  installedAt: string | null;
+  sslEnabled: boolean;
+}
+
 export const getSettings = () =>
-  client.get<{ data: any }>('/admin/settings').then((r) => r.data.data);
+  client.get<{ data: PlatformSettingsResponse }>('/admin/settings').then((r) => r.data.data);
+
+export const updateSettings = (data: Partial<PlatformSettingsResponse['editable']>) =>
+  client.patch<{ data: any }>('/admin/settings', data).then((r) => r.data.data);
 
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);

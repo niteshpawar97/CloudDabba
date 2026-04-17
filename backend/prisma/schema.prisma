@@ -130,6 +130,11 @@ model PlatformSettings {
   adminEmail     String?   @map("admin_email") @db.VarChar(255)
   sslEnabled     Boolean   @default(false) @map("ssl_enabled")
   installedAt    DateTime? @map("installed_at")
+  platformName   String    @default("CloudDabba") @map("platform_name") @db.VarChar(100)
+  corsOrigins    String?   @map("cors_origins") @db.Text
+  allowSignup    Boolean   @default(true) @map("allow_signup")
+  sslEmail       String?   @map("ssl_email") @db.VarChar(255)
+  defaultBranch  String    @default("main") @map("default_branch") @db.VarChar(100)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 

@@ -300,13 +300,62 @@ export class AdminController {
   static async getSettings(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { config } = require('../../shared/config/app.config');
-      sendSuccess(res, {
-        domain: config.domain.base,
+      const prismaClient = require('../../database/connection').default;
+      const row = await prismaClient.platformSettings.findUnique({ where: { id: 'singleton' } });
+
+      const editable = {
+        platformName: row?.platformName ?? 'CloudDabba',
+        baseDomain: row?.baseDomain ?? config.domain.base ?? '',
+        adminEmail: row?.adminEmail ?? config.domain.adminEmail ?? '',
+        sslEmail: row?.sslEmail ?? '',
+        corsOrigins: row?.corsOrigins ?? (config.cors.origin || []).join(','),
+        allowSignup: row?.allowSignup ?? true,
+        defaultBranch: row?.defaultBranch ?? 'main',
+      };
+
+      const infrastructure = {
         port: config.app.port,
         environment: config.app.nodeEnv,
         portRange: `${config.ports.rangeStart}-${config.ports.rangeEnd}`,
-        corsOrigin: config.cors.origin,
+        nginxSitesPath: config.nginx.sitesPath,
+        dockerSocket: config.docker.socketPath,
+      };
+
+      sendSuccess(res, {
+        editable,
+        infrastructure,
+        installedAt: row?.installedAt ?? null,
+        sslEnabled: row?.sslEnabled ?? false,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateSettings(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const prismaClient = require('../../database/connection').default;
+      const { platformName, baseDomain, adminEmail, sslEmail, corsOrigins, allowSignup, defaultBranch } = req.body;
+
+      const data: any = {};
+      if (typeof platformName === 'string') data.platformName = platformName.trim().slice(0, 100);
+      if (typeof baseDomain === 'string') data.baseDomain = baseDomain.trim().slice(0, 255) || null;
+      if (typeof adminEmail === 'string') data.adminEmail = adminEmail.trim().slice(0, 255) || null;
+      if (typeof sslEmail === 'string') data.sslEmail = sslEmail.trim().slice(0, 255) || null;
+      if (typeof corsOrigins === 'string') data.corsOrigins = corsOrigins.trim() || null;
+      if (typeof allowSignup === 'boolean') data.allowSignup = allowSignup;
+      if (typeof defaultBranch === 'string') data.defaultBranch = defaultBranch.trim().slice(0, 100) || 'main';
+
+      const row = await prismaClient.platformSettings.upsert({
+        where: { id: 'singleton' },
+        update: data,
+        create: { id: 'singleton', ...data },
+      });
+
+      const { SetupService } = require('../../core/services/setup.service');
+      SetupService.invalidateCache();
+
+      sendSuccess(res, row, 'Settings updated');
     } catch (error) {
       next(error);
     }
