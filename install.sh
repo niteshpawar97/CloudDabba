@@ -12,7 +12,7 @@ LOG_FILE="$INSTALL_DIR/install.log"
 ROLLBACK_ACTIONS=()
 
 # --- Progress ---
-TOTAL=12
+TOTAL=13
 STEP=0
 T0=0
 
@@ -149,7 +149,59 @@ check_and_install_deps() {
     info "Installing Certbot..."; run sudo apt-get install -y certbot; ok "Certbot installed"; fi
   run_quiet sudo apt-get install -y python3-certbot-nginx || true
 
+  # MariaDB (for database provisioning feature)
+  if command -v mariadb &>/dev/null; then
+    ok "MariaDB $(mariadb --version | awk '{print $5}' | tr -d ',')"
+  else
+    info "Installing MariaDB..."
+    run sudo apt-get install -y mariadb-server
+    run_quiet sudo systemctl enable mariadb
+    run_quiet sudo systemctl start mariadb
+    ok "MariaDB installed"
+  fi
+
   echo -e "  ${D}└─${N} ${G}${BLD}All dependencies ready${N}"
+}
+
+configure_mariadb() {
+  MARIADB_ADMIN_USER="clouddabba_admin"
+  MARIADB_ADMIN_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=')
+
+  # Create/update admin user with remote access permission
+  info "Creating MariaDB admin user..."
+  if sudo mariadb -e "SELECT 1" &>/dev/null; then
+    # Socket auth works — use directly
+    sudo mariadb <<EOF >> "$LOG_FILE" 2>&1 || true
+CREATE USER IF NOT EXISTS '${MARIADB_ADMIN_USER}'@'%' IDENTIFIED BY '${MARIADB_ADMIN_PASSWORD}';
+ALTER USER '${MARIADB_ADMIN_USER}'@'%' IDENTIFIED BY '${MARIADB_ADMIN_PASSWORD}';
+GRANT ALL PRIVILEGES ON *.* TO '${MARIADB_ADMIN_USER}'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+EOF
+    ok "Admin user '${MARIADB_ADMIN_USER}' created"
+  else
+    wrn "Cannot access MariaDB as root — skipping admin user creation"
+    MARIADB_ADMIN_USER="root"
+    MARIADB_ADMIN_PASSWORD=""
+  fi
+
+  # Enable remote access for Docker containers
+  info "Configuring MariaDB for Docker access..."
+  local CNF="/etc/mysql/mariadb.conf.d/50-server.cnf"
+  if [ -f "$CNF" ]; then
+    sudo sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' "$CNF"
+    sudo systemctl restart mariadb >> "$LOG_FILE" 2>&1
+    ok "MariaDB listening on all interfaces"
+  fi
+
+  # Firewall rule
+  if command -v ufw &>/dev/null && sudo ufw status 2>/dev/null | grep -q "active"; then
+    sudo ufw allow from 172.17.0.0/16 to any port 3306 >> "$LOG_FILE" 2>&1 || true
+  fi
+
+  # Update .env with MariaDB credentials
+  sed -i "s|^MARIADB_ADMIN_USER=.*|MARIADB_ADMIN_USER=${MARIADB_ADMIN_USER}|" "$INSTALL_DIR/backend/.env"
+  sed -i "s|^MARIADB_ADMIN_PASSWORD=.*|MARIADB_ADMIN_PASSWORD=${MARIADB_ADMIN_PASSWORD}|" "$INSTALL_DIR/backend/.env"
+  ok "MariaDB credentials saved to .env"
 }
 
 detect_server_ip() {
@@ -438,6 +490,9 @@ main() {
 
   step "Starting PostgreSQL & Redis"
   setup_databases
+
+  step "Configuring MariaDB"
+  configure_mariadb
 
   step "Building backend"
   build_backend
