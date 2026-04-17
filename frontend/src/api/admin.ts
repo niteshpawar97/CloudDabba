@@ -98,6 +98,17 @@ export interface PortRangeStatus {
 export const getPortRangeStatus = () =>
   client.get<{ data: PortRangeStatus }>('/admin/port-range-status').then((r) => r.data.data);
 
+export interface DomainChangeStep { name: string; ok: boolean; detail?: string; skipped?: boolean; }
+export interface DomainChangeResult {
+  ok: boolean;
+  steps: DomainChangeStep[];
+  domain: string;
+  panelUrl?: string;
+  error?: string;
+}
+export const changeDomain = (data: { domain: string; sslEmail?: string; skipDns?: boolean; skipSsl?: boolean }) =>
+  client.post<{ data: DomainChangeResult }>('/admin/change-domain', data).then((r) => r.data.data);
+
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
 

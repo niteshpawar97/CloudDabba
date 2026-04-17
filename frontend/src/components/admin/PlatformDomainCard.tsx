@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo } from '../../api/admin';
+import { getServerInfo, testDns, getSslStatus, getPortRangeStatus, changeDomain, DnsTestResult, SslStatus, PortRangeStatus, ServerInfo, DomainChangeResult } from '../../api/admin';
 import { Button } from '../ui/Button';
-import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock } from 'lucide-react';
+import { Input } from '../ui/Input';
+import { Spinner } from '../ui/Spinner';
+import { Globe, Shield, Server, Check, X, Copy, AlertTriangle, Play, Lock, ArrowRightCircle, ExternalLink } from 'lucide-react';
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -84,6 +86,32 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
   const [checkingPorts, setCheckingPorts] = useState(false);
   const [guideOpen, setGuideOpen] = useState<string | null>(null);
 
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const [newDomain, setNewDomain] = useState('');
+  const [newSslEmail, setNewSslEmail] = useState('');
+  const [skipDns, setSkipDns] = useState(false);
+  const [skipSsl, setSkipSsl] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [switchResult, setSwitchResult] = useState<DomainChangeResult | null>(null);
+
+  const runSwitch = async () => {
+    setSwitching(true);
+    setSwitchResult(null);
+    try {
+      const r = await changeDomain({ domain: newDomain, sslEmail: newSslEmail || undefined, skipDns, skipSsl });
+      setSwitchResult(r);
+    } catch (e: any) {
+      setSwitchResult({
+        ok: false,
+        steps: [],
+        domain: newDomain,
+        error: e.response?.data?.message || e.message || 'Request failed',
+      });
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   useEffect(() => {
     getServerInfo().then(setInfo).catch(() => {});
   }, []);
@@ -119,13 +147,21 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
 
   return (
     <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6 space-y-5">
-      <div>
-        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Globe className="h-5 w-5 text-blue-400" /> Platform Domain & SSL
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Configure a custom domain (e.g. <code className="text-blue-400">clouddabba.dev</code>) and verify DNS + SSL are working.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Globe className="h-5 w-5 text-blue-400" /> Platform Domain & SSL
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Configure a custom domain (e.g. <code className="text-blue-400">clouddabba.dev</code>) and verify DNS + SSL are working.
+          </p>
+        </div>
+        <button
+          onClick={() => { setNewDomain(domain || ''); setSwitchOpen(true); setSwitchResult(null); }}
+          className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-colors"
+        >
+          <ArrowRightCircle className="h-4 w-4" /> Change Domain
+        </button>
       </div>
 
       {/* Server identity */}
@@ -328,6 +364,128 @@ export function PlatformDomainCard({ domain }: { domain: string }) {
           </div>
         )}
       </div>
+
+      {/* Change Domain modal */}
+      {switchOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#0a0e14] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {!switchResult ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <ArrowRightCircle className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Change Platform Domain</h3>
+                </div>
+                <p className="text-sm text-slate-400 mb-4">
+                  This will update the database, regenerate the NGINX config for the CloudDabba panel, reload NGINX, and issue an SSL certificate via Let's Encrypt.
+                </p>
+
+                <div className="space-y-3 mb-4">
+                  <Input
+                    label="New Domain"
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
+                    placeholder="clouddabba.dev"
+                    disabled={switching}
+                  />
+                  <Input
+                    label="SSL Email (for Let's Encrypt)"
+                    type="email"
+                    value={newSslEmail}
+                    onChange={(e) => setNewSslEmail(e.target.value)}
+                    placeholder="you@email.com"
+                    disabled={switching}
+                  />
+                  <div className="space-y-2 pt-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={skipDns} onChange={(e) => setSkipDns(e.target.checked)} disabled={switching} />
+                      Skip DNS verification (advanced — use if DNS is still propagating)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={skipSsl} onChange={(e) => setSkipSsl(e.target.checked)} disabled={switching} />
+                      Skip SSL issuance (stay on HTTP)
+                    </label>
+                  </div>
+                </div>
+
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5 mb-4">
+                  <p className="text-xs text-amber-400">
+                    <strong>Note:</strong> Only apex + specific subdomains get SSL via HTTP-01. Wildcard certificate requires DNS-01 challenge with a provider plugin (not automated here).
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setSwitchOpen(false)} disabled={switching}>Cancel</Button>
+                  <Button onClick={runSwitch} loading={switching} disabled={!newDomain}>
+                    <span className="flex items-center gap-2"><Play className="h-4 w-4" /> Start</span>
+                  </Button>
+                </div>
+
+                {switching && (
+                  <div className="mt-4 text-center">
+                    <Spinner size="md" />
+                    <p className="text-xs text-slate-500 mt-2">Running... this can take 30–60 seconds for SSL issuance.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`p-2 rounded-lg ${switchResult.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                    {switchResult.ok ? <Check className="h-5 w-5 text-green-400" /> : <X className="h-5 w-5 text-red-400" />}
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {switchResult.ok ? 'Domain Changed' : 'Domain Change Failed'}
+                  </h3>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  {switchResult.steps.map((s, i) => (
+                    <div key={i} className="flex items-start gap-2 bg-[#0f1218] rounded-lg px-3 py-2">
+                      {s.skipped ? (
+                        <AlertTriangle className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                      ) : s.ok ? (
+                        <Check className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium ${s.skipped ? 'text-slate-400' : s.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {s.name}{s.skipped ? ' (skipped)' : ''}
+                        </p>
+                        {s.detail && <p className="text-xs text-slate-500 mt-0.5 break-words">{s.detail}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {switchResult.error && !switchResult.ok && (
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2.5 mb-4">
+                    <p className="text-sm text-red-400">{switchResult.error}</p>
+                  </div>
+                )}
+
+                {switchResult.ok && switchResult.panelUrl && (
+                  <a
+                    href={switchResult.panelUrl}
+                    className="flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2.5 mb-4 text-sm text-green-400 hover:bg-green-500/20 transition"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open {switchResult.panelUrl}
+                  </a>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => { setSwitchResult(null); setSwitching(false); }}>Run Again</Button>
+                  <Button onClick={() => { setSwitchOpen(false); setSwitchResult(null); if (switchResult.ok) setTimeout(() => window.location.reload(), 200); }}>
+                    {switchResult.ok ? 'Reload Page' : 'Close'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

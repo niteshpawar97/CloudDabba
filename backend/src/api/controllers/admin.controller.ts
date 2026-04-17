@@ -393,6 +393,17 @@ export class AdminController {
     }
   }
 
+  static async changeDomain(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { PlatformDomainService } = require('../../core/services/platform-domain.service');
+      const { domain, sslEmail, skipDns, skipSsl } = req.body;
+      const result = await PlatformDomainService.changeDomain({ domain, sslEmail, skipDns, skipSsl });
+      sendSuccess(res, result, result.ok ? 'Domain change complete' : 'Domain change failed');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getPortRangeStatus(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { DomainDiagnosticsService } = require('../../core/services/domain-diagnostics.service');

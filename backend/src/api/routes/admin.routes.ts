@@ -42,6 +42,7 @@ router.get('/server-info', AdminController.getServerInfo);
 router.post('/test-dns', AdminController.testDns);
 router.get('/ssl-status', AdminController.getSslStatus);
 router.get('/port-range-status', AdminController.getPortRangeStatus);
+router.post('/change-domain', AdminController.changeDomain);
 
 // Changelog
 router.get('/changelog', AdminController.getChangelog);
