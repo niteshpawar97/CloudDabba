@@ -60,6 +60,9 @@ export const getSettings = () =>
 export const updateSettings = (data: Partial<PlatformSettingsResponse['editable']>) =>
   client.patch<{ data: any }>('/admin/settings', data).then((r) => r.data.data);
 
+export const restartServer = () =>
+  client.post<{ data: { scheduled: boolean; delayMs: number } }>('/admin/restart').then((r) => r.data.data);
+
 export const getImages = () =>
   client.get<{ data: any[] }>('/admin/images').then((r) => r.data.data);
 

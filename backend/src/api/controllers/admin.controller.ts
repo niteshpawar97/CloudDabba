@@ -363,6 +363,21 @@ export class AdminController {
     }
   }
 
+  static async restartServer(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const logger = require('../../shared/utils/logger').default;
+      logger.warn(`Server restart requested by admin ${req.user?.email || req.user?.id}`);
+      sendSuccess(res, { scheduled: true, delayMs: 800 }, 'Server restarting — reconnecting in a few seconds');
+
+      setTimeout(() => {
+        logger.warn('Admin-initiated restart: exiting for PM2 auto-respawn');
+        process.exit(0);
+      }, 800);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Docker images list
   static async listImages(_req: AuthRequest, res: Response, next: NextFunction) {
     try {

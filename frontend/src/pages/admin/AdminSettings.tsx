@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, PlatformSettingsResponse } from '../../api/admin';
+import { getSettings, updateSettings, restartServer, PlatformSettingsResponse } from '../../api/admin';
 import { Spinner } from '../../components/ui/Spinner';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
-import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users, Check, AlertCircle } from 'lucide-react';
+import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users, Check, AlertCircle, RotateCw, Power } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
@@ -53,6 +53,40 @@ export function AdminSettings() {
     defaultBranch: 'main',
   });
 
+  const [restartOpen, setRestartOpen] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [restartStatus, setRestartStatus] = useState<string>('');
+
+  const doRestart = async () => {
+    setRestarting(true);
+    setRestartStatus('Sending restart signal...');
+    try {
+      await restartServer();
+      setRestartStatus('Server is restarting. Waiting for it to come back online...');
+
+      const deadline = Date.now() + 60_000;
+      const poll = async () => {
+        try {
+          const r = await fetch('/api/v1/health', { cache: 'no-store' });
+          if (r.ok) {
+            setRestartStatus('Back online. Reloading...');
+            setTimeout(() => window.location.reload(), 500);
+            return;
+          }
+        } catch {}
+        if (Date.now() < deadline) {
+          setTimeout(poll, 2000);
+        } else {
+          setRestartStatus('Timed out waiting for server. Please reload manually.');
+        }
+      };
+      setTimeout(poll, 3000);
+    } catch (e: any) {
+      setRestartStatus(e.response?.data?.message || 'Restart failed');
+      setTimeout(() => { setRestarting(false); setRestartOpen(false); setRestartStatus(''); }, 3000);
+    }
+  };
+
   useEffect(() => {
     getSettings()
       .then((d) => {
@@ -87,8 +121,16 @@ export function AdminSettings() {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
-        {dirty && <span className="text-xs text-amber-400">● Unsaved changes</span>}
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
+          {dirty && <span className="text-xs text-amber-400">● Unsaved changes</span>}
+        </div>
+        <button
+          onClick={() => setRestartOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-colors"
+        >
+          <RotateCw className="h-4 w-4" /> Restart Server
+        </button>
       </div>
 
       {toast && (
@@ -161,6 +203,43 @@ export function AdminSettings() {
             <span className="flex items-center gap-2"><Save className="h-4 w-4" /> Save Changes</span>
           </Button>
         </div>
+
+        {/* Restart modal + overlay */}
+        {restartOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-[#0a0e14] border border-white/[0.08] rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+              {!restarting ? (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-red-500/10">
+                      <Power className="h-5 w-5 text-red-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Restart Server?</h3>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-2">
+                    The backend API (<code className="text-blue-400">clouddabba-api</code>) will restart via PM2.
+                    All connected admin sessions and deployment webhooks will briefly disconnect (~5–10 seconds).
+                  </p>
+                  <p className="text-sm text-slate-400 mb-6">
+                    Use this after changing <code className="text-blue-400">.env</code> infrastructure values (Port, Port Range, secrets).
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <Button variant="secondary" onClick={() => setRestartOpen(false)}>Cancel</Button>
+                    <Button onClick={doRestart} className="!bg-red-500 hover:!bg-red-600">
+                      <span className="flex items-center gap-2"><RotateCw className="h-4 w-4" /> Restart Now</span>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <Spinner size="lg" />
+                  <p className="text-slate-300 mt-4 font-medium">Restarting...</p>
+                  <p className="text-sm text-slate-500 mt-2">{restartStatus}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Read-only: Infrastructure */}
         <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6">
