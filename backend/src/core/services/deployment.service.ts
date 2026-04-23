@@ -107,6 +107,28 @@ export class DeploymentService {
       // Reorganize fullstack projects into standard backend/ + frontend/ structure
       const buildArgs: Record<string, string> = {};
       const projectConfig = project.envVars as any;
+
+      // Write project env vars to .env files so build-time code (next build,
+      // vite build, prisma generate) can read them. Runtime still gets them
+      // via container env; this just makes them available during image build.
+      const INTERNAL_KEYS = new Set(['backendPath', 'frontendPath']);
+      if (projectConfig && typeof projectConfig === 'object') {
+        const envLines: string[] = [];
+        for (const [k, v] of Object.entries(projectConfig)) {
+          if (INTERNAL_KEYS.has(k) || v == null) continue;
+          const val = String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+          envLines.push(`${k}="${val}"`);
+        }
+        if (envLines.length > 0) {
+          const content = envLines.join('\n') + '\n';
+          // Write multiple filenames so any framework picks them up
+          for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
+            await fs.writeFile(path.join(buildDir, name), content, 'utf-8');
+          }
+          await LogService.createLog(deploymentId, 'BUILD', `Injected ${envLines.length} env var(s) for build`);
+        }
+      }
+
       if (buildType === 'FULLSTACK') {
         // Priority: project config > auto-detection > defaults
         const backendPath = projectConfig?.backendPath || detection.structure?.backendPath || 'backend';
