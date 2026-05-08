@@ -1,6 +1,7 @@
 # CloudDabba: Frontend SPA template
 # Handles: React, Vue, Angular, Svelte, Astro, Gatsby, Solid.js
 # Builds with npm, normalizes output to _static/, serves with nginx
+# Includes SPA fallback so client-side routes (/about, /blog, etc) work on direct hit.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -31,8 +32,9 @@ RUN mkdir -p /app/_static && \
     fi
 
 FROM nginx:alpine
-RUN rm -rf /usr/share/nginx/html/*
+RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
 COPY --from=build /app/_static /usr/share/nginx/html
+COPY spa.conf /etc/nginx/conf.d/default.conf
 RUN chmod -R 755 /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

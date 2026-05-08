@@ -206,6 +206,12 @@ export class DockerService {
     await fs.copyFile(path.join(templatesDir, templateName), destPath);
     logger.info(`Copied ${templateName} to ${repoPath}`);
 
+    // SPA fallback config for static / SPA frontends — fixes 404 on deep links
+    if (projectType === 'REACT_FRONTEND' || projectType === 'STATIC_SITE') {
+      await fs.copyFile(path.join(templatesDir, 'spa.conf'), path.join(repoPath, 'spa.conf'));
+      logger.info('Copied spa.conf (SPA fallback for client-side routes)');
+    }
+
     // Copy supporting files for fullstack (nginx config + start script)
     if (projectType === 'FULLSTACK') {
       await fs.copyFile(path.join(templatesDir, 'fullstack-nginx.conf'), path.join(repoPath, 'fullstack-nginx.conf'));
