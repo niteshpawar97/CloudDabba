@@ -141,12 +141,23 @@ export class NginxService {
       const isRootDomain = customDomain.split('.').length <= 2;
       const hasWww = isRootDomain && !customDomain.startsWith('www.');
 
-      const configContent = ejs.render(CUSTOM_DOMAIN_HTTP_TEMPLATE, { customDomain, port, hasWww });
+      // Preserve SSL on redeploys: if a Let's Encrypt cert already exists for
+      // this domain, render the SSL template so HTTPS keeps working with the
+      // new container port. Otherwise fall back to plain HTTP.
+      const certPath = `/etc/letsencrypt/live/${customDomain}/fullchain.pem`;
+      let useSsl = false;
+      try {
+        await execFileAsync('sudo', ['test', '-f', certPath], { timeout: 5000 });
+        useSsl = true;
+      } catch {}
+
+      const template = useSsl ? CUSTOM_DOMAIN_SSL_TEMPLATE : CUSTOM_DOMAIN_HTTP_TEMPLATE;
+      const configContent = ejs.render(template, { customDomain, port, hasWww });
 
       const safeName = customDomain.replace(/[^a-z0-9.-]/gi, '_');
       const configPath = path.join(config.nginx.sitesPath, `custom-${safeName}.conf`);
       await sudoWriteFile(configPath, configContent);
-      logger.info(`Custom domain NGINX config (HTTP): ${configPath}`);
+      logger.info(`Custom domain NGINX config (${useSsl ? 'SSL' : 'HTTP'}): ${configPath}`);
 
       await this.reload();
     } catch (error: any) {
