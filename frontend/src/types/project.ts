@@ -1,6 +1,6 @@
 import { Deployment } from './deployment';
 
-export type ProjectType = 'NODE_BACKEND' | 'REACT_FRONTEND' | 'NEXTJS_APP' | 'STATIC_SITE' | 'FULLSTACK' | 'CUSTOM_DOCKERFILE';
+export type ProjectType = 'NODE_BACKEND' | 'REACT_FRONTEND' | 'NEXTJS_APP' | 'STATIC_SITE' | 'FULLSTACK' | 'CUSTOM_DOCKERFILE' | 'DOCKER_COMPOSE';
 export type ProjectStatus = 'ACTIVE' | 'INACTIVE' | 'FAILED' | 'BUILDING';
 
 export interface Project {

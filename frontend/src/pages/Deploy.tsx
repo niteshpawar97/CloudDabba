@@ -455,6 +455,7 @@ export function Deploy() {
               <option value="STATIC_SITE">Static Site (HTML/CSS/JS)</option>
               <option value="FULLSTACK">Fullstack (backend + frontend)</option>
               <option value="CUSTOM_DOCKERFILE">Custom Dockerfile</option>
+              <option value="DOCKER_COMPOSE">Docker Compose (ERPNext, multi-service)</option>
             </select>
           </div>
 

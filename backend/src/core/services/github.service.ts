@@ -155,7 +155,13 @@ export class GitHubService {
   static async detectProjectType(repoPath: string): Promise<DetectionResult> {
     const entries = await fs.readdir(repoPath);
 
-    // Check for custom Dockerfile first
+    // Docker Compose (multi-container apps like ERPNext, Frappe, Strapi+DB, etc) — checked first
+    const composeFile = entries.find((e) => /^(docker-)?compose\.ya?ml$/i.test(e));
+    if (composeFile) {
+      return { type: 'DOCKER_COMPOSE', confidence: 'high', reason: `Docker Compose: ${composeFile}` };
+    }
+
+    // Check for custom Dockerfile
     if (entries.includes('Dockerfile')) {
       return { type: 'CUSTOM_DOCKERFILE', confidence: 'high', reason: 'Dockerfile found in root' };
     }

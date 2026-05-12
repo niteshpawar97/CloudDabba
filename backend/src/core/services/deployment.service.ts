@@ -102,6 +102,13 @@ export class DeploymentService {
 
       // Prefer auto-detection (full filesystem access) over stored type when confident
       const buildType = (detection.confidence !== 'low') ? detectedType : (project.projectType || detectedType);
+
+      // Docker Compose flow — separate from single-container path
+      if (buildType === 'DOCKER_COMPOSE') {
+        await this.deployCompose(buildDir, project, deploymentId);
+        return;
+      }
+
       await DockerService.copyDockerfile(buildDir, buildType);
 
       // Reorganize fullstack projects into standard backend/ + frontend/ structure
@@ -289,6 +296,170 @@ export class DeploymentService {
       // Cleanup build directory
       await fs.rm(buildDir, { recursive: true, force: true }).catch(() => {});
     }
+  }
+
+  /**
+   * Deploy a project that ships its own docker-compose.yml (ERPNext, Frappe,
+   * Strapi+DB, etc). We don't build a single image — we hand off to the
+   * docker compose CLI under a project-scoped name and then discover which
+   * service exposes a public port to route NGINX to.
+   */
+  private static async deployCompose(buildDir: string, project: any, deploymentId: string) {
+    const { spawn } = await import('child_process');
+    const composeProjectName = `cd-${project.subdomain}`;
+
+    await LogService.createLog(deploymentId, 'BUILD',
+      `Docker Compose project: ${composeProjectName}`);
+    await LogService.createLog(deploymentId, 'BUILD',
+      `Running: docker compose -p ${composeProjectName} up -d --build`);
+
+    // Tear down any previous compose project with the same name (idempotent redeploy)
+    await this.runCompose(['-p', composeProjectName, 'down'], buildDir, deploymentId, true);
+
+    // Build + start
+    const upRc = await this.runCompose(
+      ['-p', composeProjectName, 'up', '-d', '--build', '--remove-orphans'],
+      buildDir,
+      deploymentId,
+      false,
+    );
+    if (upRc !== 0) {
+      throw new Error(`docker compose up failed with exit code ${upRc}`);
+    }
+
+    // Discover the main service's published host port
+    await this.updateStatus(deploymentId, 'DEPLOYING');
+    const main = await this.discoverComposePort(buildDir, composeProjectName);
+    if (!main) {
+      throw new Error('Could not find any service with a published port. Ensure at least one service in compose has a `ports:` entry.');
+    }
+    await LogService.createLog(deploymentId, 'SYSTEM',
+      `Detected web service: ${main.service} → host:${main.hostPort}`);
+
+    // Persist for NGINX routing + future teardown
+    await prisma.deployment.update({
+      where: { id: deploymentId },
+      data: {
+        containerId: `compose:${composeProjectName}`,
+        containerPort: main.hostPort,
+      },
+    });
+
+    // Stop previous LIVE deployments for this project (mark stopped)
+    const previousDeployments = await prisma.deployment.findMany({
+      where: { projectId: project.id, status: 'LIVE', id: { not: deploymentId } },
+    });
+    for (const prev of previousDeployments) {
+      await prisma.deployment.update({
+        where: { id: prev.id },
+        data: { status: 'STOPPED', finishedAt: new Date() },
+      });
+    }
+
+    // NGINX config — same logic as single-container path
+    const customDomain = project.customDomain;
+    const domainVerified = project.domainVerified;
+    if (customDomain && domainVerified) {
+      await NginxService.generateRedirectConfig(project.subdomain, customDomain);
+      await NginxService.generateCustomDomainConfig(customDomain, main.hostPort);
+      await LogService.createLog(deploymentId, 'SYSTEM',
+        `Custom domain: ${customDomain} → host:${main.hostPort}`);
+    } else {
+      await NginxService.generateConfig(project.subdomain, main.hostPort);
+      await LogService.createLog(deploymentId, 'SYSTEM',
+        `Subdomain configured: ${project.subdomain} → host:${main.hostPort}`);
+    }
+
+    await this.updateStatus(deploymentId, 'LIVE');
+    await prisma.deployment.update({
+      where: { id: deploymentId },
+      data: { finishedAt: new Date() },
+    });
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'ACTIVE' },
+    });
+    await LogService.createLog(deploymentId, 'SYSTEM', 'Deployment successful! Compose stack is live.');
+
+    // Spawn function only declared above; reference to avoid unused warning
+    void spawn;
+  }
+
+  /**
+   * Run `docker compose <args>` in cwd, stream output to deployment logs.
+   * Returns the process exit code.
+   */
+  private static async runCompose(
+    args: string[],
+    cwd: string,
+    deploymentId: string,
+    silent: boolean,
+  ): Promise<number> {
+    const { spawn } = await import('child_process');
+    return new Promise((resolve) => {
+      const proc = spawn('docker', ['compose', ...args], { cwd });
+
+      const emit = (chunk: Buffer) => {
+        if (silent) return;
+        const text = chunk.toString();
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed) LogService.streamLog(deploymentId, 'BUILD', trimmed);
+        }
+      };
+
+      proc.stdout.on('data', emit);
+      proc.stderr.on('data', emit);
+      proc.on('close', (code: number | null) => resolve(code ?? 1));
+      proc.on('error', () => resolve(1));
+    });
+  }
+
+  /**
+   * Pick a "main" service from the compose project and return its host port.
+   * Strategy:
+   *   1. Prefer services named like a web layer (frontend/web/app/nginx/proxy/traefik).
+   *   2. Else prefer one with a published container port matching 80 / 8080 / 3000 / 5000 / 8000.
+   *   3. Else the first service that has any published port.
+   */
+  private static async discoverComposePort(
+    cwd: string,
+    composeProjectName: string,
+  ): Promise<{ service: string; hostPort: number } | null> {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(execFile);
+
+    const { stdout } = await exec('docker', [
+      'ps',
+      '--filter', `label=com.docker.compose.project=${composeProjectName}`,
+      '--format', '{{.Names}}|{{.Label "com.docker.compose.service"}}|{{.Ports}}',
+    ], { cwd });
+
+    type Entry = { service: string; hostPort: number; containerPort: number };
+    const entries: Entry[] = [];
+    for (const line of stdout.split('\n')) {
+      const [, service, portsStr] = line.split('|');
+      if (!service || !portsStr) continue;
+      // Examples: "0.0.0.0:8080->8080/tcp, :::8080->8080/tcp"
+      const m = portsStr.match(/(?:\d+\.\d+\.\d+\.\d+:|:::)?(\d+)->(\d+)\/tcp/);
+      if (!m) continue;
+      entries.push({
+        service,
+        hostPort: parseInt(m[1], 10),
+        containerPort: parseInt(m[2], 10),
+      });
+    }
+    if (entries.length === 0) return null;
+
+    const preferNames = /^(frontend|web|app|nginx|proxy|traefik|caddy|api|server|site)$/i;
+    const preferPorts = new Set([80, 8080, 3000, 5000, 8000, 4000, 8888]);
+
+    let pick = entries.find((e) => preferNames.test(e.service));
+    if (!pick) pick = entries.find((e) => preferPorts.has(e.containerPort));
+    if (!pick) pick = entries[0];
+
+    return { service: pick.service, hostPort: pick.hostPort };
   }
 
   /**

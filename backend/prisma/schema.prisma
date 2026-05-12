@@ -28,6 +28,7 @@ enum ProjectType {
   STATIC_SITE
   FULLSTACK
   CUSTOM_DOCKERFILE
+  DOCKER_COMPOSE
 
   @@map("project_type")
 }

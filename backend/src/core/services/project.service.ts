@@ -104,9 +104,26 @@ export class ProjectService {
   }
 
   static async delete(projectId: string, userId: string) {
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { deployments: { orderBy: { startedAt: 'desc' }, take: 1 } },
+    });
     if (!project) throw new AppError('Project not found', 404);
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+
+    // Tear down docker-compose stack if this was a compose deployment
+    const lastDeployment = project.deployments[0];
+    if (lastDeployment?.containerId?.startsWith('compose:')) {
+      const composeProjectName = lastDeployment.containerId.replace(/^compose:/, '');
+      try {
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const exec = promisify(execFile);
+        await exec('docker', ['compose', '-p', composeProjectName, 'down', '-v', '--remove-orphans'], { timeout: 60000 });
+      } catch {
+        // Non-fatal — orphaned containers can be cleaned up via docker admin tools
+      }
+    }
 
     await prisma.project.delete({ where: { id: projectId } });
     return project;
