@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthLayout } from './layouts/AuthLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { LandingPage } from './pages/landing/LandingPage';
+import { Docs } from './pages/landing/Docs';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
@@ -37,6 +38,7 @@ function App() {
 
           {/* Public landing page */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/docs" element={<Docs />} />
 
           {/* Auth pages */}
           <Route element={<AuthLayout />}>

@@ -26,6 +26,7 @@ export function Navbar() {
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            <Link to="/docs" className="hover:text-white transition-colors">Docs</Link>
             <a href="https://github.com/niteshpawar97/CloudDabba" target="_blank" className="hover:text-white transition-colors">GitHub</a>
           </div>
 
@@ -48,6 +49,7 @@ export function Navbar() {
             <a href="#features" className="block text-slate-400 hover:text-white">Features</a>
             <a href="#how-it-works" className="block text-slate-400 hover:text-white">How It Works</a>
             <a href="#pricing" className="block text-slate-400 hover:text-white">Pricing</a>
+            <Link to="/docs" className="block text-slate-400 hover:text-white">Docs</Link>
             <Link to="/login" className="block text-slate-400 hover:text-white">Sign In</Link>
             <Link to="/signup" className="block text-blue-400">Get Started</Link>
           </div>

@@ -1,4 +1,5 @@
 import { Cloud } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
@@ -27,8 +28,8 @@ export function Footer() {
           <div>
             <h4 className="text-sm font-semibold mb-3 text-slate-300">Resources</h4>
             <ul className="space-y-2 text-sm text-slate-500">
+              <li><Link to="/docs" className="hover:text-white transition-colors">Documentation</Link></li>
               <li><a href="https://github.com/niteshpawar97/CloudDabba" target="_blank" className="hover:text-white transition-colors">GitHub</a></li>
-              <li><a href="https://github.com/niteshpawar97/CloudDabba#readme" target="_blank" className="hover:text-white transition-colors">Documentation</a></li>
               <li><a href="https://github.com/niteshpawar97/CloudDabba/issues" target="_blank" className="hover:text-white transition-colors">Report Issue</a></li>
             </ul>
           </div>
