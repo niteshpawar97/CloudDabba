@@ -345,6 +345,20 @@ export class DeploymentService {
       },
     });
 
+    // Wait for the service to actually accept connections before declaring LIVE.
+    // Compose apps (ERPNext / Frappe / Strapi) often take 30-90s to bench-init
+    // even after the container is "Started", so just trusting `docker ps` gives
+    // a 502 the moment a user hits the URL.
+    await LogService.createLog(deploymentId, 'SYSTEM',
+      `Waiting for ${main.service} to accept connections on 127.0.0.1:${main.hostPort}…`);
+    const reachable = await this.waitForPort('127.0.0.1', main.hostPort, 120, deploymentId);
+    if (!reachable) {
+      await LogService.createLog(deploymentId, 'SYSTEM',
+        `Service did not become reachable within 120s. Check container logs: docker logs cd-${project.subdomain}-${main.service}-1`);
+      throw new Error(`Service on host:${main.hostPort} did not start in time. The container is up but the app inside isn't listening — usually missing env vars or an in-app crash. Check container logs.`);
+    }
+    await LogService.createLog(deploymentId, 'SYSTEM', `Service is responding on 127.0.0.1:${main.hostPort}`);
+
     // Stop previous LIVE deployments for this project (mark stopped)
     const previousDeployments = await prisma.deployment.findMany({
       where: { projectId: project.id, status: 'LIVE', id: { not: deploymentId } },
@@ -413,6 +427,40 @@ export class DeploymentService {
       proc.on('close', (code: number | null) => resolve(code ?? 1));
       proc.on('error', () => resolve(1));
     });
+  }
+
+  /**
+   * Poll a TCP port until something accepts a connection, or timeout.
+   * Used for compose deploys where the container starts fast but the app
+   * inside (Frappe, Rails, JVM) needs time to bind a listener.
+   */
+  private static async waitForPort(
+    host: string,
+    port: number,
+    timeoutSec: number,
+    deploymentId: string,
+  ): Promise<boolean> {
+    const net = await import('net');
+    const start = Date.now();
+    let attempt = 0;
+    while (Date.now() - start < timeoutSec * 1000) {
+      attempt++;
+      const ok = await new Promise<boolean>((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(2000);
+        socket.once('connect', () => { socket.destroy(); resolve(true); });
+        socket.once('error', () => { socket.destroy(); resolve(false); });
+        socket.once('timeout', () => { socket.destroy(); resolve(false); });
+        socket.connect(port, host);
+      });
+      if (ok) return true;
+      if (attempt % 5 === 0) {
+        const elapsed = Math.floor((Date.now() - start) / 1000);
+        await LogService.createLog(deploymentId, 'SYSTEM', `Still waiting (${elapsed}s elapsed, attempt ${attempt})…`);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return false;
   }
 
   /**
