@@ -629,9 +629,23 @@ export class DeploymentService {
 
       if (attempt % 5 === 0) {
         const elapsed = Math.floor((Date.now() - start) / 1000);
-        const detail = lastStatus != null ? `last status ${lastStatus}` : (lastError || 'no connection yet');
+        // Translate noisy socket errors into a human hint about what's happening.
+        // ECONNRESET / ECONNREFUSED during startup just means the container hasn't
+        // finished booting — it's not a real error until the timeout hits.
+        let detail: string;
+        if (lastStatus != null) {
+          detail = `responded HTTP ${lastStatus}`;
+        } else if (lastError?.includes('ECONNRESET') || lastError?.includes('ECONNREFUSED')) {
+          detail = 'container booting';
+        } else if (lastError?.includes('timeout')) {
+          detail = 'app slow to respond';
+        } else if (lastError) {
+          detail = lastError;
+        } else {
+          detail = 'no connection yet';
+        }
         await LogService.createLog(deploymentId, 'SYSTEM',
-          `Still waiting (${elapsed}s elapsed, ${detail})…`);
+          `Still starting (${elapsed}s elapsed, ${detail})…`);
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
