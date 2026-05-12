@@ -266,7 +266,25 @@ export class DockerService {
     onLog: (line: string) => void,
     onError: (err: Error) => void
   ): Promise<() => void> {
-    const container = docker.getContainer(containerId);
+    // Compose deployments store the compose project name (e.g. "compose:cd-niketerp"),
+    // not a real Docker container ID. Resolve to the first running container in that project.
+    let resolvedId = containerId;
+    if (containerId.startsWith('compose:')) {
+      const composeProject = containerId.replace(/^compose:/, '');
+      const containers = await docker.listContainers({
+        filters: { label: [`com.docker.compose.project=${composeProject}`] },
+      });
+      if (containers.length === 0) {
+        throw new Error(`No running containers for compose project ${composeProject}`);
+      }
+      // Prefer service named like the web layer; else the first
+      const preferNames = /^(frontend|web|app|nginx|proxy|traefik|caddy|api|server|site)$/i;
+      const pick = containers.find((c) => preferNames.test(c.Labels?.['com.docker.compose.service'] || ''))
+        || containers[0];
+      resolvedId = pick.Id;
+    }
+
+    const container = docker.getContainer(resolvedId);
     const stream = await container.logs({
       stdout: true,
       stderr: true,
