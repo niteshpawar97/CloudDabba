@@ -8,6 +8,15 @@ import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import logger from '../../shared/utils/logger';
 
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let val = bytes / 1024;
+  let i = 0;
+  while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+  return `${val.toFixed(1)} ${units[i]}`;
+}
+
 export class AdminController {
   // Dashboard stats
   static async getStats(_req: AuthRequest, res: Response, next: NextFunction) {
@@ -526,6 +535,60 @@ export class AdminController {
       }
 
       sendSuccess(res, { cleaned }, `${cleaned} unused images removed`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Docker system maintenance — equivalent to `docker container/image/system prune`
+  // These work at the daemon level (not scoped to clouddabba.managed), so they
+  // free disk regardless of who created the dead objects. Running containers
+  // are never touched — only stopped/exited ones and unreferenced images/cache.
+  static async pruneStoppedContainers(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result: any = await (docker as any).pruneContainers();
+      const removed = (result?.ContainersDeleted || []).length;
+      const reclaimed = result?.SpaceReclaimed || 0;
+      sendSuccess(res, { removed, reclaimed }, `Removed ${removed} stopped containers (${formatBytes(reclaimed)} reclaimed)`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async pruneUnusedImages(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // dangling:false makes this equivalent to `docker image prune -a` — removes
+      // all images not referenced by any container, not just dangling ones.
+      const result: any = await (docker as any).pruneImages({ filters: { dangling: { false: true } } });
+      const removed = (result?.ImagesDeleted || []).length;
+      const reclaimed = result?.SpaceReclaimed || 0;
+      sendSuccess(res, { removed, reclaimed }, `Removed ${removed} unused images (${formatBytes(reclaimed)} reclaimed)`);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async pruneSystem(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      // `docker system prune -a` = containers + images(-a) + networks + build cache.
+      // Dockerode doesn't expose buildkit cache prune via the typed API, so we
+      // run the three the SDK supports and report cumulative numbers.
+      const containerRes: any = await (docker as any).pruneContainers().catch(() => ({}));
+      const imageRes: any = await (docker as any).pruneImages({ filters: { dangling: { false: true } } }).catch(() => ({}));
+      const networkRes: any = await (docker as any).pruneNetworks().catch(() => ({}));
+
+      const containersRemoved = (containerRes?.ContainersDeleted || []).length;
+      const imagesRemoved = (imageRes?.ImagesDeleted || []).length;
+      const networksRemoved = (networkRes?.NetworksDeleted || []).length;
+      const reclaimed =
+        (containerRes?.SpaceReclaimed || 0) +
+        (imageRes?.SpaceReclaimed || 0);
+
+      sendSuccess(
+        res,
+        { containersRemoved, imagesRemoved, networksRemoved, reclaimed },
+        `Pruned ${containersRemoved} containers, ${imagesRemoved} images, ${networksRemoved} networks (${formatBytes(reclaimed)} reclaimed)`,
+      );
     } catch (error) {
       next(error);
     }

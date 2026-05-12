@@ -32,6 +32,11 @@ router.get('/images', AdminController.listImages);
 router.delete('/images/:id', AdminController.deleteImage);
 router.post('/images/cleanup', AdminController.cleanupImages);
 
+// Docker system maintenance (broader than the *.managed cleanups above)
+router.post('/docker/prune/containers', AdminController.pruneStoppedContainers);
+router.post('/docker/prune/images', AdminController.pruneUnusedImages);
+router.post('/docker/prune/system', AdminController.pruneSystem);
+
 // Settings
 router.get('/settings', AdminController.getSettings);
 router.patch('/settings', AdminController.updateSettings);

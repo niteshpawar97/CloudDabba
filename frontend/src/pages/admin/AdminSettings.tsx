@@ -7,6 +7,7 @@ import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { PlatformDomainCard } from '../../components/admin/PlatformDomainCard';
 import { CloudFirewallGuideCard } from '../../components/admin/CloudFirewallGuideCard';
+import { DockerMaintenanceCard } from '../../components/admin/DockerMaintenanceCard';
 
 function Toggle({ checked, onChange, label, desc }: { checked: boolean; onChange: (v: boolean) => void; label: string; desc?: string }) {
   return (
@@ -220,6 +221,9 @@ export function AdminSettings() {
 
         {/* Cloud provider firewall guide */}
         <CloudFirewallGuideCard />
+
+        {/* Docker disk maintenance — prune stopped containers / unused images / system */}
+        <DockerMaintenanceCard />
 
         {/* Save bar */}
         <div className="flex items-center justify-end gap-3 sticky bottom-4 z-10">

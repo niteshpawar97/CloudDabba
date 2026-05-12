@@ -138,6 +138,20 @@ export const deleteImage = (id: string) =>
 export const cleanupImages = () =>
   client.post<{ data: any }>('/admin/images/cleanup').then((r) => r.data.data);
 
+export interface DockerPruneResult {
+  removed?: number;
+  reclaimed?: number;
+  containersRemoved?: number;
+  imagesRemoved?: number;
+  networksRemoved?: number;
+}
+export const pruneContainers = () =>
+  client.post<{ data: DockerPruneResult; message: string }>('/admin/docker/prune/containers').then((r) => r.data);
+export const pruneImages = () =>
+  client.post<{ data: DockerPruneResult; message: string }>('/admin/docker/prune/images').then((r) => r.data);
+export const pruneSystem = () =>
+  client.post<{ data: DockerPruneResult; message: string }>('/admin/docker/prune/system').then((r) => r.data);
+
 export const getChangelog = () =>
   client.get<{ data: any[] }>('/admin/changelog').then((r) => r.data.data);
 
