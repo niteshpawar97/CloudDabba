@@ -40,7 +40,7 @@ export class ProjectService {
       existing = await prisma.project.findUnique({ where: { subdomain } });
     }
 
-    return prisma.project.create({
+    const project = await prisma.project.create({
       data: {
         userId,
         name: data.name,
@@ -57,6 +57,36 @@ export class ProjectService {
         },
       },
     });
+
+    // ERPNext requires MariaDB + Redis to function. Provision both immediately
+    // on project create so the user never lands in the "deploy → crash because
+    // env vars are empty" trap.
+    if (data.projectType === 'ERPNEXT') {
+      const { DatabaseProvisionService } = await import('./database-provision.service');
+      try {
+        await DatabaseProvisionService.enableMariadb(project.id, userId);
+      } catch (err: any) {
+        // Already enabled or transient error — surface but don't undo project creation
+        if (!String(err?.message || '').includes('already enabled')) {
+          throw err;
+        }
+      }
+      try {
+        await DatabaseProvisionService.enableRedis(project.id, userId);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('already enabled')) {
+          throw err;
+        }
+      }
+      // Re-fetch so caller sees the provisioned db fields
+      const refreshed = await prisma.project.findUnique({
+        where: { id: project.id },
+        include: { deployments: { take: 1, orderBy: { startedAt: 'desc' } } },
+      });
+      return refreshed || project;
+    }
+
+    return project;
   }
 
   static async listByUser(userId: string) {

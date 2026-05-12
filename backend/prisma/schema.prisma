@@ -29,6 +29,7 @@ enum ProjectType {
   FULLSTACK
   CUSTOM_DOCKERFILE
   DOCKER_COMPOSE
+  ERPNEXT
 
   @@map("project_type")
 }

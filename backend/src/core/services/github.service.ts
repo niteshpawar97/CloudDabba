@@ -158,6 +158,15 @@ export class GitHubService {
     // Docker Compose (multi-container apps like ERPNext, Frappe, Strapi+DB, etc) — checked first
     const composeFile = entries.find((e) => /^(docker-)?compose\.ya?ml$/i.test(e));
     if (composeFile) {
+      // Peek inside to see if it's ERPNext/Frappe — those need mandatory MariaDB + Redis
+      // and dedicated env vars (SITE_NAME, ADMIN_PASSWORD), so we route them to the
+      // ERPNEXT type which auto-provisions and validates the required pieces.
+      try {
+        const composeContent = await fs.readFile(path.join(repoPath, composeFile), 'utf-8');
+        if (/\b(frappe|erpnext|bench[-_]?init|MYSQL_URL.*frappe|niketerp)\b/i.test(composeContent)) {
+          return { type: 'ERPNEXT', confidence: 'high', reason: `ERPNext/Frappe stack detected in ${composeFile}` };
+        }
+      } catch {}
       return { type: 'DOCKER_COMPOSE', confidence: 'high', reason: `Docker Compose: ${composeFile}` };
     }
 

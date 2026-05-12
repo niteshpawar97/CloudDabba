@@ -141,6 +141,25 @@ export class DeploymentService {
         await LogService.createLog(deploymentId, 'BUILD', `Injected ${envLines.length} env var(s) into build context`);
       }
 
+      // ERPNext is a specialization of DOCKER_COMPOSE: same execution path, but
+      // we hard-require MariaDB + Redis (Frappe will crash without them) and the
+      // SITE_NAME / ADMIN_PASSWORD env vars (entrypoint refuses to start otherwise).
+      // Fail fast here with a clear message instead of letting the container crash-loop.
+      if (buildType === 'ERPNEXT') {
+        const p = project as any;
+        const missing: string[] = [];
+        if (!p.mariadbEnabled || !p.mariadbName || !p.mariadbUser || !p.mariadbPasswordEnc) missing.push('MariaDB (enable in project Databases)');
+        if (!p.redisEnabled || p.redisDbNumber == null) missing.push('Redis (enable in project Databases)');
+        const envObj = (p.envVars as Record<string, any>) || {};
+        if (!envObj.SITE_NAME) missing.push('SITE_NAME env var');
+        if (!envObj.ADMIN_PASSWORD) missing.push('ADMIN_PASSWORD env var');
+        if (missing.length > 0) {
+          throw new Error(`ERPNext prerequisites missing: ${missing.join(', ')}. Fix in the project page and redeploy.`);
+        }
+        await this.deployCompose(buildDir, project, deploymentId);
+        return;
+      }
+
       // Docker Compose flow — separate from single-container path
       if (buildType === 'DOCKER_COMPOSE') {
         await this.deployCompose(buildDir, project, deploymentId);

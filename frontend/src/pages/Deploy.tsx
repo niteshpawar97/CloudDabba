@@ -72,6 +72,22 @@ export function Deploy() {
     getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
   }, []);
 
+  // ERPNext requires SITE_NAME + ADMIN_PASSWORD. Seed empty rows the moment the
+  // user picks the type so the inputs are visible without an extra "Add" click,
+  // and force-enable MariaDB + Redis toggles since the deploy will refuse without them.
+  useEffect(() => {
+    if (projectType !== 'ERPNEXT') return;
+    setEnableMy(true);
+    setEnableRd(true);
+    setEnvVars((prev) => {
+      const next = [...prev];
+      const hasKey = (k: string) => next.some((v) => v.key.trim() === k);
+      if (!hasKey('SITE_NAME')) next.push({ key: 'SITE_NAME', value: '' });
+      if (!hasKey('ADMIN_PASSWORD')) next.push({ key: 'ADMIN_PASSWORD', value: '' });
+      return next;
+    });
+  }, [projectType]);
+
   // Pre-fill from URL params
   useEffect(() => {
     const repoUrl = searchParams.get('repo');
@@ -200,6 +216,21 @@ export function Deploy() {
   const handleDeploy = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedRepo) return;
+
+    // ERPNext requires SITE_NAME + ADMIN_PASSWORD. Block submit with a clear
+    // message rather than letting the container crash-loop after a 5-minute build.
+    if (projectType === 'ERPNEXT') {
+      const haveSite = envVars.some((v) => v.key.trim() === 'SITE_NAME' && v.value.trim());
+      const havePass = envVars.some((v) => v.key.trim() === 'ADMIN_PASSWORD' && v.value.trim());
+      const missing = [!haveSite && 'SITE_NAME', !havePass && 'ADMIN_PASSWORD'].filter(Boolean);
+      if (missing.length > 0) {
+        const msg = `ERPNext requires ${missing.join(' and ')}. Fill them in Environment Variables below.`;
+        toast.error(msg);
+        setError(msg);
+        return;
+      }
+    }
+
     setDeploying(true);
     setError('');
 
@@ -474,9 +505,46 @@ export function Deploy() {
               <option value="STATIC_SITE">Static Site (HTML/CSS/JS)</option>
               <option value="FULLSTACK">Fullstack (backend + frontend)</option>
               <option value="CUSTOM_DOCKERFILE">Custom Dockerfile</option>
-              <option value="DOCKER_COMPOSE">Docker Compose (ERPNext, multi-service)</option>
+              <option value="DOCKER_COMPOSE">Docker Compose (multi-service apps)</option>
+              <option value="ERPNEXT">ERPNext / Frappe (auto-provisions MariaDB + Redis)</option>
             </select>
           </div>
+
+          {/* ERPNext-specific notice: MariaDB + Redis are mandatory, SITE_NAME +
+              ADMIN_PASSWORD must be set via env vars. We surface this UI upfront
+              so users don't deploy → crash → confused. */}
+          {projectType === 'ERPNEXT' && (
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <Server className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-amber-300">ERPNext setup</p>
+                  <p className="text-xs text-slate-400">
+                    MariaDB and Redis will be auto-provisioned for this project on deploy. You only need to set two
+                    required environment variables below — SITE_NAME and ADMIN_PASSWORD. CloudDabba injects
+                    MYSQL_URL and REDIS_URL into the build context, so your compose file's <code className="text-amber-300">${'${MYSQL_URL}'}</code> /
+                    <code className="text-amber-300"> ${'${REDIS_URL}'}</code> substitutions resolve automatically.
+                  </p>
+                </div>
+              </div>
+              {(() => {
+                const haveSite = envVars.some((v) => v.key.trim() === 'SITE_NAME' && v.value.trim());
+                const havePass = envVars.some((v) => v.key.trim() === 'ADMIN_PASSWORD' && v.value.trim());
+                const missing = [
+                  !haveSite && 'SITE_NAME',
+                  !havePass && 'ADMIN_PASSWORD',
+                ].filter(Boolean);
+                if (missing.length === 0) {
+                  return <p className="text-xs text-emerald-400">✓ Required env vars set: SITE_NAME, ADMIN_PASSWORD</p>;
+                }
+                return (
+                  <p className="text-xs text-amber-300">
+                    ⚠ Add the following in <span className="font-mono">Environment Variables</span> below: <span className="font-mono">{missing.join(', ')}</span>
+                  </p>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Fullstack Config */}
           {projectType === 'FULLSTACK' && (
