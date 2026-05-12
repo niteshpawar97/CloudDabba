@@ -116,24 +116,41 @@ export class DeploymentService {
       const projectConfig = project.envVars as any;
 
       // Write project env vars to .env files so build-time code (next build,
-      // vite build, prisma generate) can read them. Runtime still gets them
-      // via container env; this just makes them available during image build.
+      // vite build, prisma generate) can read them, AND so docker compose can
+      // substitute ${VAR} references. Auto-includes provisioned database URLs
+      // so compose projects (ERPNext etc) get DATABASE_URL / MYSQL_URL /
+      // REDIS_URL the same way single-container deploys do.
       const INTERNAL_KEYS = new Set(['backendPath', 'frontendPath']);
+      const envLines: string[] = [];
+      const escape = (v: any) => String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
       if (projectConfig && typeof projectConfig === 'object') {
-        const envLines: string[] = [];
         for (const [k, v] of Object.entries(projectConfig)) {
           if (INTERNAL_KEYS.has(k) || v == null) continue;
-          const val = String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
-          envLines.push(`${k}="${val}"`);
+          envLines.push(`${k}="${escape(v)}"`);
         }
-        if (envLines.length > 0) {
-          const content = envLines.join('\n') + '\n';
-          // Write multiple filenames so any framework picks them up
-          for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
-            await fs.writeFile(path.join(buildDir, name), content, 'utf-8');
-          }
-          await LogService.createLog(deploymentId, 'BUILD', `Injected ${envLines.length} env var(s) for build`);
+      }
+      // Provisioned database URLs — same as the single-container runtime injection below
+      const projForBuildEnv = project as any;
+      if (projForBuildEnv.dbEnabled && projForBuildEnv.dbPasswordEnc && projForBuildEnv.dbName && projForBuildEnv.dbUser) {
+        const { decrypt } = await import('./encryption.service');
+        const { DatabaseProvisionService } = await import('./database-provision.service');
+        envLines.push(`DATABASE_URL="${escape(DatabaseProvisionService.buildDatabaseUrl(projForBuildEnv.dbUser, decrypt(projForBuildEnv.dbPasswordEnc), projForBuildEnv.dbName))}"`);
+      }
+      if (projForBuildEnv.redisEnabled && projForBuildEnv.redisDbNumber != null) {
+        const { DatabaseProvisionService } = await import('./database-provision.service');
+        envLines.push(`REDIS_URL="${escape(DatabaseProvisionService.buildRedisUrl(projForBuildEnv.redisDbNumber))}"`);
+      }
+      if (projForBuildEnv.mariadbEnabled && projForBuildEnv.mariadbPasswordEnc && projForBuildEnv.mariadbName && projForBuildEnv.mariadbUser) {
+        const { decrypt: dec } = await import('./encryption.service');
+        const { DatabaseProvisionService: DbProv } = await import('./database-provision.service');
+        envLines.push(`MYSQL_URL="${escape(DbProv.buildMariadbUrl(projForBuildEnv.mariadbUser, dec(projForBuildEnv.mariadbPasswordEnc), projForBuildEnv.mariadbName))}"`);
+      }
+      if (envLines.length > 0) {
+        const content = envLines.join('\n') + '\n';
+        for (const name of ['.env', '.env.local', '.env.production', '.env.production.local']) {
+          await fs.writeFile(path.join(buildDir, name), content, 'utf-8');
         }
+        await LogService.createLog(deploymentId, 'BUILD', `Injected ${envLines.length} env var(s) into build context`);
       }
 
       if (buildType === 'FULLSTACK') {
