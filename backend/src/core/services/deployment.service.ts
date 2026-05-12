@@ -103,23 +103,12 @@ export class DeploymentService {
       // Prefer auto-detection (full filesystem access) over stored type when confident
       const buildType = (detection.confidence !== 'low') ? detectedType : (project.projectType || detectedType);
 
-      // Docker Compose flow — separate from single-container path
-      if (buildType === 'DOCKER_COMPOSE') {
-        await this.deployCompose(buildDir, project, deploymentId);
-        return;
-      }
-
-      await DockerService.copyDockerfile(buildDir, buildType);
-
-      // Reorganize fullstack projects into standard backend/ + frontend/ structure
-      const buildArgs: Record<string, string> = {};
+      // Write project env vars to .env files BEFORE any branching, so:
+      //  - build-time code (next build, vite build, prisma generate) reads them
+      //  - docker compose substitutes ${VAR} references in compose.yml at up time
+      // Auto-includes provisioned database URLs (DATABASE_URL / MYSQL_URL / REDIS_URL)
+      // so compose projects (ERPNext, Frappe) wire up the same way single-container deploys do.
       const projectConfig = project.envVars as any;
-
-      // Write project env vars to .env files so build-time code (next build,
-      // vite build, prisma generate) can read them, AND so docker compose can
-      // substitute ${VAR} references. Auto-includes provisioned database URLs
-      // so compose projects (ERPNext etc) get DATABASE_URL / MYSQL_URL /
-      // REDIS_URL the same way single-container deploys do.
       const INTERNAL_KEYS = new Set(['backendPath', 'frontendPath']);
       const envLines: string[] = [];
       const escape = (v: any) => String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
@@ -129,7 +118,6 @@ export class DeploymentService {
           envLines.push(`${k}="${escape(v)}"`);
         }
       }
-      // Provisioned database URLs — same as the single-container runtime injection below
       const projForBuildEnv = project as any;
       if (projForBuildEnv.dbEnabled && projForBuildEnv.dbPasswordEnc && projForBuildEnv.dbName && projForBuildEnv.dbUser) {
         const { decrypt } = await import('./encryption.service');
@@ -152,6 +140,16 @@ export class DeploymentService {
         }
         await LogService.createLog(deploymentId, 'BUILD', `Injected ${envLines.length} env var(s) into build context`);
       }
+
+      // Docker Compose flow — separate from single-container path
+      if (buildType === 'DOCKER_COMPOSE') {
+        await this.deployCompose(buildDir, project, deploymentId);
+        return;
+      }
+
+      await DockerService.copyDockerfile(buildDir, buildType);
+
+      const buildArgs: Record<string, string> = {};
 
       if (buildType === 'FULLSTACK') {
         // Priority: project config > auto-detection > defaults
