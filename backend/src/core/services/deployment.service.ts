@@ -357,19 +357,20 @@ export class DeploymentService {
       },
     });
 
-    // Wait for the service to actually accept connections before declaring LIVE.
+    // Wait for the service to actually respond with HTTP < 500 before declaring LIVE.
     // Compose apps (ERPNext / Frappe / Strapi) often take 30-90s to bench-init
-    // even after the container is "Started", so just trusting `docker ps` gives
-    // a 502 the moment a user hits the URL.
+    // even after the container is "Started" — TCP being open is not enough, the
+    // app inside has to be healthy too.
     await LogService.createLog(deploymentId, 'SYSTEM',
-      `Waiting for ${main.service} to accept connections on 127.0.0.1:${main.hostPort}…`);
-    const reachable = await this.waitForPort('127.0.0.1', main.hostPort, 120, deploymentId);
-    if (!reachable) {
+      `Waiting for ${main.service} to respond on 127.0.0.1:${main.hostPort}…`);
+    const probe = await this.waitForPort('127.0.0.1', main.hostPort, 120, deploymentId);
+    if (!probe.ok) {
       await LogService.createLog(deploymentId, 'SYSTEM',
-        `Service did not become reachable within 120s. Check container logs: docker logs cd-${project.subdomain}-${main.service}-1`);
-      throw new Error(`Service on host:${main.hostPort} did not start in time. The container is up but the app inside isn't listening — usually missing env vars or an in-app crash. Check container logs.`);
+        `Probe failed: ${probe.reason}. Check container logs: docker logs cd-${project.subdomain}-${main.service}-1 --tail 100`);
+      throw new Error(`App did not become healthy in 120s: ${probe.reason}`);
     }
-    await LogService.createLog(deploymentId, 'SYSTEM', `Service is responding on 127.0.0.1:${main.hostPort}`);
+    await LogService.createLog(deploymentId, 'SYSTEM',
+      `Service is healthy on 127.0.0.1:${main.hostPort} (${probe.reason})`);
 
     // Stop previous LIVE deployments for this project (mark stopped)
     const previousDeployments = await prisma.deployment.findMany({
@@ -550,22 +551,33 @@ export class DeploymentService {
   }
 
   /**
-   * Poll a TCP port until something accepts a connection, or timeout.
-   * Used for compose deploys where the container starts fast but the app
-   * inside (Frappe, Rails, JVM) needs time to bind a listener.
+   * Poll the service with a real HTTP request until it returns a meaningful
+   * response, or timeout. TCP probe alone gives false positives — the
+   * container's web server can accept connections while the app inside is
+   * still bootstrapping (e.g. Frappe before `bench new-site`).
+   *
+   * Pass criteria: any HTTP response with status < 500. We treat 5xx as
+   * "app crashed mid-startup" and keep waiting. 4xx (including 404) means
+   * the app IS responding — that's enough to flip status to LIVE.
    */
   private static async waitForPort(
     host: string,
     port: number,
     timeoutSec: number,
     deploymentId: string,
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; reason: string }> {
+    const http = await import('http');
     const net = await import('net');
     const start = Date.now();
     let attempt = 0;
+    let lastStatus: number | null = null;
+    let lastError: string | null = null;
+
     while (Date.now() - start < timeoutSec * 1000) {
       attempt++;
-      const ok = await new Promise<boolean>((resolve) => {
+
+      // First make sure TCP is open at all — cheap fail-fast
+      const tcpOk = await new Promise<boolean>((resolve) => {
         const socket = new net.Socket();
         socket.setTimeout(2000);
         socket.once('connect', () => { socket.destroy(); resolve(true); });
@@ -573,14 +585,48 @@ export class DeploymentService {
         socket.once('timeout', () => { socket.destroy(); resolve(false); });
         socket.connect(port, host);
       });
-      if (ok) return true;
+
+      if (tcpOk) {
+        // Now actually make an HTTP request
+        const httpResult = await new Promise<{ status: number | null; err: string | null }>((resolve) => {
+          const req = http.request(
+            { host, port, path: '/', method: 'GET', timeout: 5000, headers: { Host: 'localhost' } },
+            (res) => {
+              res.resume();
+              resolve({ status: res.statusCode ?? null, err: null });
+            },
+          );
+          req.on('error', (e) => resolve({ status: null, err: e.message }));
+          req.on('timeout', () => { req.destroy(); resolve({ status: null, err: 'request timeout' }); });
+          req.end();
+        });
+
+        if (httpResult.status != null) {
+          lastStatus = httpResult.status;
+          if (httpResult.status < 500) {
+            return { ok: true, reason: `HTTP ${httpResult.status}` };
+          }
+          // 5xx — app is up but erroring. Keep waiting in case it's startup-related.
+        } else if (httpResult.err) {
+          lastError = httpResult.err;
+        }
+      }
+
       if (attempt % 5 === 0) {
         const elapsed = Math.floor((Date.now() - start) / 1000);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Still waiting (${elapsed}s elapsed, attempt ${attempt})…`);
+        const detail = lastStatus != null ? `last status ${lastStatus}` : (lastError || 'no connection yet');
+        await LogService.createLog(deploymentId, 'SYSTEM',
+          `Still waiting (${elapsed}s elapsed, ${detail})…`);
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
-    return false;
+
+    return {
+      ok: false,
+      reason: lastStatus != null
+        ? `App kept returning HTTP ${lastStatus} for ${timeoutSec}s — usually a config / env-var error inside the container.`
+        : (lastError || 'no response'),
+    };
   }
 
   /**
