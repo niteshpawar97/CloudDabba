@@ -310,15 +310,31 @@ export class DeploymentService {
 
     await LogService.createLog(deploymentId, 'BUILD',
       `Docker Compose project: ${composeProjectName}`);
-    await LogService.createLog(deploymentId, 'BUILD',
-      `Running: docker compose -p ${composeProjectName} up -d --build`);
 
     // Tear down any previous compose project with the same name (idempotent redeploy)
     await this.runCompose(['-p', composeProjectName, 'down'], buildDir, deploymentId, true);
 
-    // Build + start
+    // Plan port routing BEFORE deploy:
+    //  - Allocate an isolated port from CloudDabba's range (10000–20000)
+    //  - Generate docker-compose.override.yml that:
+    //     * Pins the main service to 127.0.0.1:<allocated>:<container_port>
+    //     * Rewrites every other service's public port binding to 127.0.0.1
+    //       (so MariaDB/Redis/whatever stays internal, not exposed on 0.0.0.0)
+    // This way only NGINX reaches the app, matching how single-container deploys behave.
+    const plan = await this.planComposeOverride(buildDir, deploymentId);
+    if (!plan) {
+      throw new Error('No service in docker-compose.yml has a `ports:` entry. CloudDabba needs at least one service to expose a port so it can route traffic.');
+    }
+    const allocatedHostPort = await allocatePort();
+    await this.writeComposeOverride(buildDir, plan, allocatedHostPort);
+    await LogService.createLog(deploymentId, 'BUILD',
+      `Routing ${plan.mainService}:${plan.mainContainerPort} → 127.0.0.1:${allocatedHostPort} (via NGINX → ${project.subdomain})`);
+
+    // Build + start with the override applied
+    await LogService.createLog(deploymentId, 'BUILD',
+      `Running: docker compose -p ${composeProjectName} up -d --build`);
     const upRc = await this.runCompose(
-      ['-p', composeProjectName, 'up', '-d', '--build', '--remove-orphans'],
+      ['-p', composeProjectName, '-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', 'up', '-d', '--build', '--remove-orphans'],
       buildDir,
       deploymentId,
       false,
@@ -327,14 +343,10 @@ export class DeploymentService {
       throw new Error(`docker compose up failed with exit code ${upRc}`);
     }
 
-    // Discover the main service's published host port
     await this.updateStatus(deploymentId, 'DEPLOYING');
-    const main = await this.discoverComposePort(buildDir, composeProjectName);
-    if (!main) {
-      throw new Error('Could not find any service with a published port. Ensure at least one service in compose has a `ports:` entry.');
-    }
+    const main = { service: plan.mainService, hostPort: allocatedHostPort };
     await LogService.createLog(deploymentId, 'SYSTEM',
-      `Detected web service: ${main.service} → host:${main.hostPort}`);
+      `Web service: ${main.service} → 127.0.0.1:${main.hostPort}`);
 
     // Persist for NGINX routing + future teardown
     await prisma.deployment.update({
@@ -427,6 +439,114 @@ export class DeploymentService {
       proc.on('close', (code: number | null) => resolve(code ?? 1));
       proc.on('error', () => resolve(1));
     });
+  }
+
+  /**
+   * Parse docker-compose.yml and pick the main service + its container port.
+   * Heuristics:
+   *  1. Service name in {frontend,web,app,nginx,proxy,traefik,caddy,api,server,site}
+   *  2. Else a service exposing port in {80,8080,3000,5000,8000,4000,8888}
+   *  3. Else the first service with a `ports:` entry
+   * Returns null if no service has any ports defined.
+   */
+  private static async planComposeOverride(
+    buildDir: string,
+    _deploymentId: string,
+  ): Promise<{ mainService: string; mainContainerPort: number; serviceContainerPorts: Record<string, number[]> } | null> {
+    const yaml = await import('js-yaml');
+    const candidates = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'];
+    let raw: string | null = null;
+    for (const name of candidates) {
+      try {
+        raw = await fs.readFile(path.join(buildDir, name), 'utf-8');
+        break;
+      } catch {}
+    }
+    if (!raw) return null;
+
+    const doc: any = yaml.load(raw);
+    const services = doc?.services;
+    if (!services || typeof services !== 'object') return null;
+
+    const parsePort = (entry: any): { host?: number; container: number } | null => {
+      if (typeof entry === 'number') return { container: entry };
+      if (typeof entry !== 'string') {
+        if (entry?.target) return { host: entry.published, container: entry.target };
+        return null;
+      }
+      // Strings: "8000", "8000:8000", "127.0.0.1:8000:8000", "8000:8000/tcp"
+      const cleaned = entry.replace(/\/[a-z]+$/i, '');
+      const parts = cleaned.split(':');
+      const container = parseInt(parts[parts.length - 1], 10);
+      const host = parts.length >= 2 ? parseInt(parts[parts.length - 2], 10) : undefined;
+      if (Number.isNaN(container)) return null;
+      return { container, host };
+    };
+
+    const serviceContainerPorts: Record<string, number[]> = {};
+    const candidatesPort: { service: string; container: number }[] = [];
+    for (const [svc, def] of Object.entries(services as any)) {
+      const ports = (def as any)?.ports;
+      if (!Array.isArray(ports)) continue;
+      const cps: number[] = [];
+      for (const p of ports) {
+        const parsed = parsePort(p);
+        if (parsed?.container) {
+          cps.push(parsed.container);
+          candidatesPort.push({ service: svc, container: parsed.container });
+        }
+      }
+      if (cps.length > 0) serviceContainerPorts[svc] = cps;
+    }
+    if (candidatesPort.length === 0) return null;
+
+    const preferNames = /^(frontend|web|app|nginx|proxy|traefik|caddy|api|server|site)$/i;
+    const preferPorts = new Set([80, 8080, 3000, 5000, 8000, 4000, 8888]);
+
+    let pick = candidatesPort.find((c) => preferNames.test(c.service));
+    if (!pick) pick = candidatesPort.find((c) => preferPorts.has(c.container));
+    if (!pick) pick = candidatesPort[0];
+
+    return {
+      mainService: pick.service,
+      mainContainerPort: pick.container,
+      serviceContainerPorts,
+    };
+  }
+
+  /**
+   * Generate docker-compose.override.yml that:
+   *  - Pins main service to 127.0.0.1:<allocatedHostPort>:<mainContainerPort>
+   *  - Rebinds every other service's published ports to 127.0.0.1 (so MariaDB,
+   *    Redis, queues etc don't get exposed on 0.0.0.0).
+   */
+  private static async writeComposeOverride(
+    buildDir: string,
+    plan: { mainService: string; mainContainerPort: number; serviceContainerPorts: Record<string, number[]> },
+    allocatedHostPort: number,
+  ): Promise<void> {
+    const yaml = await import('js-yaml');
+    const services: Record<string, any> = {};
+
+    for (const [svc, containerPorts] of Object.entries(plan.serviceContainerPorts)) {
+      if (svc === plan.mainService) {
+        services[svc] = {
+          ports: [`127.0.0.1:${allocatedHostPort}:${plan.mainContainerPort}`],
+        };
+      } else {
+        // Hide other services from the public interface — keep them addressable
+        // on localhost only. Pick a free ephemeral host port (0 → kernel-assigned)
+        // so we don't collide with anything.
+        services[svc] = {
+          ports: containerPorts.map((cp) => `127.0.0.1::${cp}`),
+        };
+      }
+    }
+
+    const override = { services };
+    const yamlStr = '# Auto-generated by CloudDabba — do not edit; rewritten on each deploy.\n' +
+      yaml.dump(override, { lineWidth: 120 });
+    await fs.writeFile(path.join(buildDir, 'docker-compose.override.yml'), yamlStr, 'utf-8');
   }
 
   /**
