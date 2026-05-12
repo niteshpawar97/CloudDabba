@@ -11,7 +11,8 @@ import { scanPublicRepo, uploadZip } from '../api/source';
 import { createProject } from '../api/projects';
 import { triggerDeploy } from '../api/deployments';
 import { getConfig, checkSubdomain } from '../api/config';
-import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe, Scan, Container, Layout, FileCode2, Server } from 'lucide-react';
+import { enablePostgres, enableMariadb, enableRedis } from '../api/database';
+import { Rocket, Plus, Trash2, Upload, ClipboardPaste, FileText, Check, X, GitBranch, Globe, Scan, Container, Layout, FileCode2, Server, Database } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useToast } from '../components/ui/Toast';
 
@@ -58,6 +59,9 @@ export function Deploy() {
   const [subdomain, setSubdomain] = useState('');
   const [subdomainAvailable, setSubdomainAvailable] = useState<boolean | null>(null);
   const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
+  const [enablePg, setEnablePg] = useState(false);
+  const [enableMy, setEnableMy] = useState(false);
+  const [enableRd, setEnableRd] = useState(false);
   const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([]);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState('');
@@ -219,6 +223,21 @@ export function Deploy() {
         subdomain: subdomain || undefined,
         envVars: Object.keys(envObj).length > 0 ? envObj : undefined,
       });
+
+      // Provision selected databases before first deploy so URLs land in the container
+      const provisionErrors: string[] = [];
+      if (enablePg) {
+        try { await enablePostgres(project.id); } catch (e: any) { provisionErrors.push(`PostgreSQL: ${e.response?.data?.message || e.message}`); }
+      }
+      if (enableMy) {
+        try { await enableMariadb(project.id); } catch (e: any) { provisionErrors.push(`MariaDB: ${e.response?.data?.message || e.message}`); }
+      }
+      if (enableRd) {
+        try { await enableRedis(project.id); } catch (e: any) { provisionErrors.push(`Redis: ${e.response?.data?.message || e.message}`); }
+      }
+      if (provisionErrors.length > 0) {
+        toast.error(`Some databases failed: ${provisionErrors.join(' · ')}. Deploying anyway.`);
+      }
 
       const deployment = await triggerDeploy(project.id);
       toast.success('Deployment triggered!');
@@ -490,6 +509,47 @@ export function Deploy() {
               </p>
             </div>
           )}
+
+          {/* Databases */}
+          <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Database className="h-4 w-4 text-purple-400" />
+              <label className="text-sm font-medium text-slate-200">Databases</label>
+              <span className="text-xs text-slate-500 ml-2">(optional — provisioned before first deploy)</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Each enabled database gets a unique credential and is auto-injected into the container as
+              <code className="text-blue-400 mx-1">DATABASE_URL</code>/<code className="text-blue-400">MYSQL_URL</code>/<code className="text-blue-400">REDIS_URL</code>.
+              You can also enable/disable later from the project page.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {[
+                { id: 'pg', label: 'PostgreSQL', desc: 'DATABASE_URL', value: enablePg, set: setEnablePg, color: 'text-sky-400' },
+                { id: 'my', label: 'MariaDB', desc: 'MYSQL_URL', value: enableMy, set: setEnableMy, color: 'text-amber-400' },
+                { id: 'rd', label: 'Redis', desc: 'REDIS_URL', value: enableRd, set: setEnableRd, color: 'text-red-400' },
+              ].map((d) => (
+                <label
+                  key={d.id}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition ${
+                    d.value
+                      ? 'bg-blue-500/10 border-blue-500/40'
+                      : 'bg-[#0f1218] border-white/[0.06] hover:border-white/[0.12]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={d.value}
+                    onChange={(e) => d.set(e.target.checked)}
+                    className="rounded"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${d.value ? 'text-white' : 'text-slate-300'}`}>{d.label}</p>
+                    <p className={`text-xs font-mono ${d.color}`}>{d.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
 
           {/* Environment Variables Section */}
           <div>
