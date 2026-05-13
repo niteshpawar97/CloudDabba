@@ -35,6 +35,20 @@ jobs:
 
             echo "=== Step 3: Backend build ==="
             cd "$APP_DIR/backend"
+
+            # Sanity check: if a previous root-owned run polluted node_modules,
+            # later prisma generate / npm install will fail with EACCES on
+            # unlink. Bail early with a clear fix command instead of crashing
+            # mid-build with an opaque error.
+            if [ -d node_modules ] && [ ! -w node_modules ]; then
+              echo "ERROR: node_modules is not writable by $(whoami)."
+              echo "Looks like a previous build ran as root. Fix once on the VPS:"
+              echo ""
+              echo "  sudo chown -R learn-nodejs:learn-nodejs $APP_DIR"
+              echo ""
+              exit 1
+            fi
+
             npm install --production=false
             npx prisma generate
             npx prisma db push --skip-generate
