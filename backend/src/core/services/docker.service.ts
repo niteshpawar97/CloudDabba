@@ -274,6 +274,61 @@ export class DockerService {
     return pick.Id;
   }
 
+  // Streaming variant of exec. Pipes stdout/stderr chunks to the callbacks as
+  // they arrive — used by the WebSocket debug shell so the user sees output
+  // from long-running commands (npm run seed, prisma migrate, bench install)
+  // in real time. Returns the exit code once the command finishes.
+  static async execStream(
+    containerId: string,
+    command: string[],
+    onStdout: (chunk: string) => void,
+    onStderr: (chunk: string) => void,
+    abortSignal?: AbortSignal,
+  ): Promise<{ exitCode: number | null }> {
+    const resolvedId = await this.resolveContainerId(containerId);
+    const container = docker.getContainer(resolvedId);
+
+    const execInstance = await container.exec({
+      Cmd: command,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    });
+
+    return new Promise((resolve, reject) => {
+      execInstance.start({ hijack: true, stdin: false }, (err: any, stream: any) => {
+        if (err) return reject(err);
+
+        const stdoutSink = {
+          write: (c: Buffer | string) => onStdout(typeof c === 'string' ? c : c.toString('utf8')),
+        };
+        const stderrSink = {
+          write: (c: Buffer | string) => onStderr(typeof c === 'string' ? c : c.toString('utf8')),
+        };
+        docker.modem.demuxStream(stream, stdoutSink as any, stderrSink as any);
+
+        const abortHandler = () => {
+          try { stream.destroy?.(); } catch {}
+        };
+        abortSignal?.addEventListener('abort', abortHandler, { once: true });
+
+        stream.on('end', async () => {
+          abortSignal?.removeEventListener('abort', abortHandler);
+          try {
+            const inspect = await execInstance.inspect();
+            resolve({ exitCode: inspect.ExitCode ?? null });
+          } catch {
+            resolve({ exitCode: null });
+          }
+        });
+        stream.on('error', (e: Error) => {
+          abortSignal?.removeEventListener('abort', abortHandler);
+          reject(e);
+        });
+      });
+    });
+  }
+
   // Run a command inside the (resolved) container and return stdout/stderr +
   // exit code. Used for the debug shell in the UI. We don't allocate a TTY
   // because we want the output as plain text, not ANSI-escaped.

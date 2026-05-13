@@ -114,7 +114,8 @@ export class DeploymentController {
         return sendSuccess(res, { stdout: '', stderr: 'No command provided.', exitCode: -1 });
       }
       // Always run through `sh -c` so quoting / redirection works as the user expects.
-      const result = await DockerService.exec(deployment.containerId, ['sh', '-c', cmd], 30000);
+      // 5 min timeout covers `npm run seed`, prisma migrate, bench install etc.
+      const result = await DockerService.exec(deployment.containerId, ['sh', '-c', cmd], 300000);
       sendSuccess(res, result);
     } catch (error: any) {
       // Surface error string to the UI rather than 500 — debug shell should never crash the panel.

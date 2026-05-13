@@ -38,6 +38,89 @@ export function setupWebSocket(server: Server) {
       return;
     }
 
+    // Interactive debug-shell mode: client sends `{ command: string }` messages,
+    // we stream stdout/stderr chunks back as JSON, and emit a final `EXIT` event
+    // with the exit code. One command at a time per socket — concurrent commands
+    // are rejected so the UI's output stays coherent.
+    if (mode === 'exec') {
+      let deployment;
+      try {
+        deployment = await prisma.deployment.findUnique({
+          where: { id: deploymentId },
+          select: { containerId: true, status: true },
+        });
+      } catch (err: any) {
+        ws.close(4006, 'DB error');
+        return;
+      }
+      if (!deployment?.containerId) {
+        ws.send(JSON.stringify({ type: 'SYSTEM', message: 'No container is running for this deployment.' }));
+        ws.close(4003, 'No container');
+        return;
+      }
+      if (deployment.status !== 'LIVE') {
+        ws.send(JSON.stringify({ type: 'SYSTEM', message: `Container is ${deployment.status} — start it first.` }));
+        ws.close(4004, 'Container not running');
+        return;
+      }
+
+      let currentAbort: AbortController | null = null;
+
+      ws.on('message', async (raw) => {
+        let payload: any;
+        try { payload = JSON.parse(raw.toString()); } catch { return; }
+
+        // Allow the client to cancel a long-running command (Ctrl+C semantics).
+        if (payload?.kind === 'cancel') {
+          currentAbort?.abort();
+          return;
+        }
+
+        const cmd = (payload?.command || '').toString().trim();
+        if (!cmd) return;
+        if (currentAbort) {
+          ws.send(JSON.stringify({ type: 'SYSTEM', message: 'Another command is still running.' }));
+          return;
+        }
+
+        currentAbort = new AbortController();
+        ws.send(JSON.stringify({ type: 'START', command: cmd }));
+
+        try {
+          const { exitCode } = await DockerService.execStream(
+            deployment.containerId!,
+            ['sh', '-c', cmd],
+            (chunk) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'STDOUT', message: chunk }));
+              }
+            },
+            (chunk) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'STDERR', message: chunk }));
+              }
+            },
+            currentAbort.signal,
+          );
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'EXIT', exitCode }));
+          }
+        } catch (err: any) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'STDERR', message: err?.message || String(err) }));
+            ws.send(JSON.stringify({ type: 'EXIT', exitCode: -1 }));
+          }
+        } finally {
+          currentAbort = null;
+        }
+      });
+
+      ws.on('close', () => { currentAbort?.abort(); });
+      ws.on('error', () => { currentAbort?.abort(); });
+      ws.send(JSON.stringify({ type: 'SYSTEM', message: 'Connected. Type a command and press Enter.' }));
+      return;
+    }
+
     // Container log streaming mode
     if (mode === 'container') {
       try {
