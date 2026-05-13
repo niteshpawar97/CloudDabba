@@ -109,8 +109,35 @@ export class DockerService {
     return container;
   }
 
+  // Compose deployments store "compose:<project-name>" in containerId because the
+  // stack has many containers, not one. start/stop/restart need to be routed
+  // through `docker compose -p <name>` instead of dockerode's single-container API.
+  private static isCompose(containerId: string): boolean {
+    return containerId.startsWith('compose:');
+  }
+
+  private static composeProject(containerId: string): string {
+    return containerId.replace(/^compose:/, '');
+  }
+
+  private static async runComposeAction(
+    action: 'start' | 'stop' | 'restart',
+    composeProjectName: string,
+  ): Promise<void> {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(execFile);
+    // `start` (not `up`) just starts existing containers — soft action, no rebuild.
+    await exec('docker', ['compose', '-p', composeProjectName, action], { timeout: 60000 });
+  }
+
   static async stopOnly(containerId: string) {
     try {
+      if (this.isCompose(containerId)) {
+        await this.runComposeAction('stop', this.composeProject(containerId));
+        logger.info(`Compose project ${this.composeProject(containerId)} stopped`);
+        return;
+      }
       const container = docker.getContainer(containerId);
       await container.stop({ t: 10 });
       logger.info(`Container ${containerId} stopped`);
@@ -123,6 +150,11 @@ export class DockerService {
 
   static async startContainer(containerId: string) {
     try {
+      if (this.isCompose(containerId)) {
+        await this.runComposeAction('start', this.composeProject(containerId));
+        logger.info(`Compose project ${this.composeProject(containerId)} started`);
+        return;
+      }
       const container = docker.getContainer(containerId);
       await container.start();
       logger.info(`Container ${containerId} started`);
@@ -136,6 +168,11 @@ export class DockerService {
 
   static async restartContainer(containerId: string) {
     try {
+      if (this.isCompose(containerId)) {
+        await this.runComposeAction('restart', this.composeProject(containerId));
+        logger.info(`Compose project ${this.composeProject(containerId)} restarted`);
+        return;
+      }
       const container = docker.getContainer(containerId);
       await container.restart({ t: 10 });
       logger.info(`Container ${containerId} restarted`);
@@ -220,9 +257,86 @@ export class DockerService {
     }
   }
 
+  // Resolve "compose:<project>" → real Docker container id of the web-tier service.
+  // For single-container deploys returns the input unchanged.
+  static async resolveContainerId(containerId: string): Promise<string> {
+    if (!containerId.startsWith('compose:')) return containerId;
+    const composeProject = containerId.replace(/^compose:/, '');
+    const containers = await docker.listContainers({
+      filters: { label: [`com.docker.compose.project=${composeProject}`] },
+    });
+    if (containers.length === 0) {
+      throw new Error(`No running containers for compose project ${composeProject}`);
+    }
+    const preferNames = /^(frontend|web|app|nginx|proxy|traefik|caddy|api|server|site|frappe)$/i;
+    const pick = containers.find((c) => preferNames.test(c.Labels?.['com.docker.compose.service'] || ''))
+      || containers[0];
+    return pick.Id;
+  }
+
+  // Run a command inside the (resolved) container and return stdout/stderr +
+  // exit code. Used for the debug shell in the UI. We don't allocate a TTY
+  // because we want the output as plain text, not ANSI-escaped.
+  static async exec(
+    containerId: string,
+    command: string[],
+    timeoutMs = 30000,
+  ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+    const resolvedId = await this.resolveContainerId(containerId);
+    const container = docker.getContainer(resolvedId);
+
+    const execInstance = await container.exec({
+      Cmd: command,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    });
+
+    return new Promise((resolve, reject) => {
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`Command exceeded ${timeoutMs / 1000}s timeout`));
+      }, timeoutMs);
+
+      execInstance.start({ hijack: true, stdin: false }, (err: any, stream: any) => {
+        if (err) { clearTimeout(timer); return reject(err); }
+
+        // Docker multiplexed stream: stdout + stderr are interleaved with 8-byte
+        // headers (stream type + payload size). dockerode has a demuxStream helper.
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+        const stdoutSink = { write: (c: Buffer) => stdoutChunks.push(c) };
+        const stderrSink = { write: (c: Buffer) => stderrChunks.push(c) };
+        docker.modem.demuxStream(stream, stdoutSink as any, stderrSink as any);
+
+        stream.on('end', async () => {
+          clearTimeout(timer);
+          if (timedOut) return;
+          stdout = Buffer.concat(stdoutChunks).toString('utf8');
+          stderr = Buffer.concat(stderrChunks).toString('utf8');
+          try {
+            const inspect = await execInstance.inspect();
+            resolve({ stdout, stderr, exitCode: inspect.ExitCode ?? null });
+          } catch (e) {
+            resolve({ stdout, stderr, exitCode: null });
+          }
+        });
+        stream.on('error', (e: Error) => {
+          clearTimeout(timer);
+          if (!timedOut) reject(e);
+        });
+      });
+    });
+  }
+
   static async getContainerStats(containerId: string) {
     try {
-      const container = docker.getContainer(containerId);
+      const resolvedId = await this.resolveContainerId(containerId);
+      const container = docker.getContainer(resolvedId);
       const stats = await container.stats({ stream: false });
       const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - (stats.precpu_stats?.cpu_usage?.total_usage || 0);
       const systemDelta = stats.cpu_stats.system_cpu_usage - (stats.precpu_stats?.system_cpu_usage || 0);
@@ -247,7 +361,8 @@ export class DockerService {
 
   static async getContainerLogs(containerId: string, tail = 200): Promise<string> {
     try {
-      const container = docker.getContainer(containerId);
+      const resolvedId = await this.resolveContainerId(containerId);
+      const container = docker.getContainer(resolvedId);
       const logs = await container.logs({
         stdout: true,
         stderr: true,
@@ -266,24 +381,7 @@ export class DockerService {
     onLog: (line: string) => void,
     onError: (err: Error) => void
   ): Promise<() => void> {
-    // Compose deployments store the compose project name (e.g. "compose:cd-niketerp"),
-    // not a real Docker container ID. Resolve to the first running container in that project.
-    let resolvedId = containerId;
-    if (containerId.startsWith('compose:')) {
-      const composeProject = containerId.replace(/^compose:/, '');
-      const containers = await docker.listContainers({
-        filters: { label: [`com.docker.compose.project=${composeProject}`] },
-      });
-      if (containers.length === 0) {
-        throw new Error(`No running containers for compose project ${composeProject}`);
-      }
-      // Prefer service named like the web layer; else the first
-      const preferNames = /^(frontend|web|app|nginx|proxy|traefik|caddy|api|server|site)$/i;
-      const pick = containers.find((c) => preferNames.test(c.Labels?.['com.docker.compose.service'] || ''))
-        || containers[0];
-      resolvedId = pick.Id;
-    }
-
+    const resolvedId = await this.resolveContainerId(containerId);
     const container = docker.getContainer(resolvedId);
     const stream = await container.logs({
       stdout: true,

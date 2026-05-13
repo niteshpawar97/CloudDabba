@@ -11,5 +11,6 @@ router.post('/:id/restart', authenticate, DeploymentController.restartDeployment
 router.get('/:id/logs', authenticate, DeploymentController.getLogs);
 router.get('/:id/container-logs', authenticate, DeploymentController.getContainerLogs);
 router.get('/:id/stats', authenticate, DeploymentController.getContainerStats);
+router.post('/:id/exec', authenticate, DeploymentController.execInContainer);
 
 export default router;

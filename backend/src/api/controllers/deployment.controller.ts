@@ -98,4 +98,31 @@ export class DeploymentController {
       next(error);
     }
   }
+
+  // Debug endpoint: run an ad-hoc command inside the (running) container and
+  // return stdout / stderr / exit code. For compose deployments we exec into
+  // the web-tier service. Used by the UI debug panel — typed commands like
+  // `ls`, `cat foo`, `env`, `printenv MYSQL_URL`.
+  static async execInContainer(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.getDeployment(req.params.id as string, req.user!.id);
+      if (!deployment.containerId) {
+        return sendSuccess(res, { stdout: '', stderr: 'No container is running for this deployment.', exitCode: -1 });
+      }
+      const cmd = (req.body?.command || '').toString().trim();
+      if (!cmd) {
+        return sendSuccess(res, { stdout: '', stderr: 'No command provided.', exitCode: -1 });
+      }
+      // Always run through `sh -c` so quoting / redirection works as the user expects.
+      const result = await DockerService.exec(deployment.containerId, ['sh', '-c', cmd], 30000);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      // Surface error string to the UI rather than 500 — debug shell should never crash the panel.
+      sendSuccess(res, {
+        stdout: '',
+        stderr: error?.message || String(error),
+        exitCode: -1,
+      });
+    }
+  }
 }

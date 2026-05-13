@@ -27,3 +27,11 @@ export const getContainerLogs = (id: string, tail = 200) =>
 
 export const getContainerStats = (id: string) =>
   client.get<{ data: { cpu: number; memory: { usage: number; limit: number; percent: number } } }>(`/deployments/${id}/stats`).then((r) => r.data.data);
+
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}
+export const execInContainer = (id: string, command: string) =>
+  client.post<{ data: ExecResult }>(`/deployments/${id}/exec`, { command }).then((r) => r.data.data);

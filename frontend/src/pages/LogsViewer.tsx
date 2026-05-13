@@ -7,9 +7,10 @@ import { useContainerLogs } from '../hooks/useContainerLogs';
 import { Deployment } from '../types/deployment';
 import { LogLine } from '../types/log';
 import { LogTerminal } from '../components/LogTerminal';
+import { DebugShell } from '../components/DebugShell';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Spinner } from '../components/ui/Spinner';
-import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle, Terminal, Hammer } from 'lucide-react';
+import { ArrowLeft, Wifi, WifiOff, Globe, Server, Clock, GitBranch, ExternalLink, CheckCircle, XCircle, Terminal, Hammer, Bug } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 interface DeploymentWithProject extends Deployment {
@@ -130,7 +131,7 @@ export function LogsViewer() {
   const [loading, setLoading] = useState(true);
   const [historicalLogs, setHistoricalLogs] = useState<LogLine[]>([]);
   const [baseDomain, setBaseDomain] = useState('clouddabba.dev');
-  const [activeTab, setActiveTab] = useState<'build' | 'runtime'>('build');
+  const [activeTab, setActiveTab] = useState<'build' | 'runtime' | 'debug'>('build');
   const { lines: liveLines, isConnected, isComplete } = useDeploymentLogs(deploymentId);
   const { lines: containerLines, isConnected: containerConnected } = useContainerLogs(
     deploymentId,
@@ -257,26 +258,47 @@ export function LogsViewer() {
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           )}
         </button>
-        {!isLive && activeTab !== 'runtime' && (
-          <span className="text-xs text-slate-600 ml-2">Runtime logs available when container is running</span>
+        <button
+          onClick={() => setActiveTab('debug')}
+          disabled={!isLive}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'debug'
+              ? 'bg-purple-600 text-white'
+              : isLive
+                ? 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-300'
+                : 'bg-white/[0.02] text-slate-600 cursor-not-allowed'
+          }`}
+          title={isLive ? 'Open a shell inside the running container' : 'Container not running'}
+        >
+          <Bug className="h-4 w-4" />
+          Debug
+        </button>
+        {!isLive && activeTab !== 'runtime' && activeTab !== 'debug' && (
+          <span className="text-xs text-slate-600 ml-2">Runtime / debug available when container is running</span>
         )}
       </div>
 
-      {/* Log Terminal */}
-      {activeTab === 'build' ? (
+      {/* Tab body */}
+      {activeTab === 'build' && (
         <LogTerminal
           lines={buildLines}
           className="flex-1"
           title="Build & Deploy"
           loading={isBuildActive}
         />
-      ) : (
+      )}
+      {activeTab === 'runtime' && (
         <LogTerminal
           lines={containerLines}
           className="flex-1"
           title="Container Runtime"
           loading={containerConnected}
         />
+      )}
+      {activeTab === 'debug' && deploymentId && (
+        <div className="flex-1 min-h-0">
+          <DebugShell deploymentId={deploymentId} enabled={isLive} />
+        </div>
       )}
     </div>
   );
