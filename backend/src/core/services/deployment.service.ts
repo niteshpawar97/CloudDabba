@@ -664,7 +664,7 @@ export class DeploymentService {
         let detail: string;
         if (lastStatus != null) {
           detail = `responded HTTP ${lastStatus}`;
-        } else if (lastError?.includes('ECONNRESET') || lastError?.includes('ECONNREFUSED')) {
+        } else if (lastError?.includes('ECONNRESET') || lastError?.includes('ECONNREFUSED') || lastError?.includes('socket hang up')) {
           detail = 'container booting';
         } else if (lastError?.includes('timeout')) {
           detail = 'app slow to respond';
@@ -679,11 +679,14 @@ export class DeploymentService {
       await new Promise((r) => setTimeout(r, 2000));
     }
 
+    const bootError = lastError?.includes('ECONNRESET') || lastError?.includes('ECONNREFUSED') || lastError?.includes('socket hang up');
     return {
       ok: false,
       reason: lastStatus != null
         ? `App kept returning HTTP ${lastStatus} for ${timeoutSec}s — usually a config / env-var error inside the container.`
-        : (lastError || 'no response'),
+        : bootError
+          ? `App did not finish starting within ${timeoutSec}s. Check container logs for crash details.`
+          : (lastError || 'no response'),
     };
   }
 

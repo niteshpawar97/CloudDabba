@@ -40,23 +40,31 @@ export class ProjectService {
       existing = await prisma.project.findUnique({ where: { subdomain } });
     }
 
-    const project = await prisma.project.create({
-      data: {
-        userId,
-        name: data.name,
-        repoUrl: data.repoUrl,
-        subdomain,
-        branch: data.branch || 'main',
-        projectType: data.projectType as any,
-        envVars: data.envVars || undefined,
-      },
-      include: {
-        deployments: {
-          take: 1,
-          orderBy: { startedAt: 'desc' },
+    let project;
+    try {
+      project = await prisma.project.create({
+        data: {
+          userId,
+          name: data.name,
+          repoUrl: data.repoUrl,
+          subdomain,
+          branch: data.branch || 'main',
+          projectType: data.projectType as any,
+          envVars: data.envVars || undefined,
         },
-      },
-    });
+        include: {
+          deployments: {
+            take: 1,
+            orderBy: { startedAt: 'desc' },
+          },
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new AppError(`A project named "${data.name}" already exists`, 409);
+      }
+      throw err;
+    }
 
     // ERPNext requires MariaDB + Redis to function. Provision both immediately
     // on project create so the user never lands in the "deploy → crash because
