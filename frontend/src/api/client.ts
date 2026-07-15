@@ -18,7 +18,9 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url: string = error.config?.url || '';
+    const isGitHubEndpoint = url.includes('/github/');
+    if (error.response?.status === 401 && !isGitHubEndpoint) {
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
