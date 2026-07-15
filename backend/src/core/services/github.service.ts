@@ -73,7 +73,7 @@ export class GitHubService {
 
       if (!response.ok) {
         if (response.status === 401) {
-          throw new AppError('Invalid GitHub PAT', 401);
+          throw new AppError('GitHub PAT is invalid or expired. Please update it in Settings.', 400);
         }
         throw new AppError(`GitHub API error: ${response.statusText}`, response.status);
       }
@@ -115,6 +115,9 @@ export class GitHubService {
     );
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new AppError('GitHub PAT is invalid or expired. Please update it in Settings.', 400);
+      }
       throw new AppError(`Failed to fetch branches: ${response.statusText}`, response.status);
     }
 
