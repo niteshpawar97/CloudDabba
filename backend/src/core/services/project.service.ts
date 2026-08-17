@@ -179,6 +179,29 @@ export class ProjectService {
     return project;
   }
 
+  static async transferOwnership(projectId: string, userId: string, recipientEmail: string) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+
+    if (!recipientEmail || typeof recipientEmail !== 'string') throw new AppError('Recipient email is required', 400);
+    const email = recipientEmail.trim().toLowerCase();
+    if (!email) throw new AppError('Recipient email is required', 400);
+
+    const currentOwner = await prisma.user.findUnique({ where: { id: userId } });
+    if (currentOwner?.email.toLowerCase() === email) {
+      throw new AppError('Project already belongs to this account', 400);
+    }
+
+    const recipient = await prisma.user.findUnique({ where: { email } });
+    if (!recipient) throw new AppError('No CloudDabba account found with that email', 404);
+
+    return prisma.project.update({
+      where: { id: projectId },
+      data: { userId: recipient.id },
+    });
+  }
+
   static async updateEnvVars(projectId: string, userId: string, envVars: Record<string, string>) {
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new AppError('Project not found', 404);

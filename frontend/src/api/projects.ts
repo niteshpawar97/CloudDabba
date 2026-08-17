@@ -19,6 +19,9 @@ export const deleteProject = (id: string) =>
 export const updateEnvVars = (id: string, envVars: Record<string, string>) =>
   client.put(`/projects/${id}/env`, { envVars });
 
+export const transferProjectOwnership = (id: string, email: string) =>
+  client.post<{ data: Project }>(`/projects/${id}/transfer`, { email }).then((r) => r.data.data);
+
 // Custom domain
 export const getDomainStatus = (id: string) =>
   client.get<{ data: any }>(`/projects/${id}/domain`).then((r) => r.data.data);

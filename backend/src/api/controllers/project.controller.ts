@@ -91,6 +91,16 @@ export class ProjectController {
     }
   }
 
+  static async transferOwnership(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+      const project = await ProjectService.transferOwnership(req.params.id as string, req.user!.id, email);
+      sendSuccess(res, project, 'Project ownership transferred');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async checkSubdomain(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const available = await ProjectService.checkSubdomain(req.params.subdomain as string);

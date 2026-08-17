@@ -19,6 +19,7 @@ router.put('/:id', authenticate, updateProjectValidator, validate, ProjectContro
 router.delete('/:id', authenticate, ProjectController.delete);
 router.put('/:id/env', authenticate, envVarsValidator, validate, ProjectController.updateEnvVars);
 router.put('/:id/subdomain', authenticate, ProjectController.updateSubdomain);
+router.post('/:id/transfer', authenticate, ProjectController.transferOwnership);
 
 // Check subdomain availability
 router.get('/check-subdomain/:subdomain', authenticate, ProjectController.checkSubdomain);

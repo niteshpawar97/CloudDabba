@@ -5,6 +5,7 @@ import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } fro
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, enableMariadb, disableMariadb, testDbConnection } from '../api/database';
 import { DatabaseBrowserModal } from '../components/project/DatabaseBrowserModal';
+import { TransferOwnershipModal } from '../components/project/TransferOwnershipModal';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
@@ -12,7 +13,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database, Send } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 function relativeTime(date: string) {
@@ -68,6 +69,7 @@ export function ProjectDetail() {
   const [dbTesting, setDbTesting] = useState(false);
   const [dbTestResult, setDbTestResult] = useState<any>(null);
   const [browseEngine, setBrowseEngine] = useState<'postgres' | 'mariadb' | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
 
   // Env vars
   const [showEnv, setShowEnv] = useState(false);
@@ -303,6 +305,7 @@ export function ProjectDetail() {
           <Button onClick={handleDeploy} loading={deploying}>
             <span className="flex items-center gap-2"><Rocket className="h-4 w-4" /> Redeploy</span>
           </Button>
+          <Button variant="secondary" onClick={() => setShowTransferModal(true)} title="Transfer Ownership"><Send className="h-4 w-4" /></Button>
           <Button variant="danger" onClick={handleDelete}><Trash2 className="h-4 w-4" /></Button>
         </div>
       </div>
@@ -888,6 +891,14 @@ export function ProjectDetail() {
       </div>
       {browseEngine && projectId && (
         <DatabaseBrowserModal projectId={projectId} engine={browseEngine} onClose={() => setBrowseEngine(null)} />
+      )}
+      {showTransferModal && projectId && (
+        <TransferOwnershipModal
+          projectId={projectId}
+          projectName={project.name}
+          onClose={() => setShowTransferModal(false)}
+          onTransferred={() => navigate('/dashboard')}
+        />
       )}
     </div>
   );
