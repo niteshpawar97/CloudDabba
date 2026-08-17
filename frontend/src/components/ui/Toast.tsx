@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { CheckCircle, XCircle, Info, X } from 'lucide-react';
+import { subscribeToastBus } from './toastBus';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -81,6 +82,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       info: (msg: string) => addToast('info', msg),
     };
   }, [addToast]);
+
+  // Let non-component code (e.g. the axios interceptor) show a toast
+  useEffect(() => subscribeToastBus(addToast), [addToast]);
 
   return (
     <ToastContext.Provider value={contextValue.current}>

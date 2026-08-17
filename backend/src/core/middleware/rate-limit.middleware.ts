@@ -15,7 +15,9 @@ function keyGenerator(req: Request): string {
 
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 100,
+  // A single project page alone fires 6-8 requests (project, DB status, webhook,
+  // domain, ...); 100/15min was tripping normal dashboard usage, not just abuse.
+  max: isDev ? 1000 : 500,
   keyGenerator,
   message: { success: false, message: 'Too many requests, please try again later.' },
   standardHeaders: true,

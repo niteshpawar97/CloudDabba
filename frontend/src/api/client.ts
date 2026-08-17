@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { emitToast } from '../components/ui/toastBus';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -15,6 +16,8 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
+let lastRateLimitToast = 0;
+
 client.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -27,6 +30,13 @@ client.interceptors.response.use(
     if (error.response?.status === 503 && error.response?.data?.code === 'SETUP_REQUIRED') {
       if (!window.location.pathname.startsWith('/setup')) {
         window.location.href = '/setup';
+      }
+    }
+    if (error.response?.status === 429) {
+      const now = Date.now();
+      if (now - lastRateLimitToast > 10000) {
+        lastRateLimitToast = now;
+        emitToast('error', error.response?.data?.message || 'Too many requests — please wait a moment and try again.');
       }
     }
     return Promise.reject(error);
