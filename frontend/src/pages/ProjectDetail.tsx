@@ -4,6 +4,7 @@ import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebh
 import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, enableMariadb, disableMariadb, testDbConnection } from '../api/database';
+import { DatabaseBrowserModal } from '../components/project/DatabaseBrowserModal';
 import { Project } from '../types/project';
 import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
@@ -66,6 +67,7 @@ export function ProjectDetail() {
   const [showDbUrl, setShowDbUrl] = useState(false);
   const [dbTesting, setDbTesting] = useState(false);
   const [dbTestResult, setDbTestResult] = useState<any>(null);
+  const [browseEngine, setBrowseEngine] = useState<'postgres' | 'mariadb' | null>(null);
 
   // Env vars
   const [showEnv, setShowEnv] = useState(false);
@@ -553,6 +555,12 @@ export function ProjectDetail() {
                 <span className={`w-2 h-2 rounded-full ${dbStatus?.postgres?.enabled ? 'bg-green-400' : 'bg-slate-600'}`} />
                 <span className="text-sm font-medium text-white">PostgreSQL</span>
               </div>
+              <div className="flex items-center gap-2">
+              {dbStatus?.postgres?.enabled && (
+                <Button size="sm" variant="secondary" onClick={() => setBrowseEngine('postgres')}>
+                  Browse
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant={dbStatus?.postgres?.enabled ? 'danger' : 'primary'}
@@ -579,6 +587,7 @@ export function ProjectDetail() {
               >
                 {dbStatus?.postgres?.enabled ? 'Disable' : 'Enable'}
               </Button>
+              </div>
             </div>
             {dbStatus?.postgres?.enabled && dbStatus.postgres.databaseUrl && (
               <div className="mt-2">
@@ -606,6 +615,12 @@ export function ProjectDetail() {
                 <span className={`w-2 h-2 rounded-full ${dbStatus?.mariadb?.enabled ? 'bg-green-400' : 'bg-slate-600'}`} />
                 <span className="text-sm font-medium text-white">MariaDB</span>
               </div>
+              <div className="flex items-center gap-2">
+              {dbStatus?.mariadb?.enabled && (
+                <Button size="sm" variant="secondary" onClick={() => setBrowseEngine('mariadb')}>
+                  Browse
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant={dbStatus?.mariadb?.enabled ? 'danger' : 'primary'}
@@ -632,6 +647,7 @@ export function ProjectDetail() {
               >
                 {dbStatus?.mariadb?.enabled ? 'Disable' : 'Enable'}
               </Button>
+              </div>
             </div>
             {dbStatus?.mariadb?.enabled && dbStatus.mariadb.mariadbUrl && (
               <div className="mt-2">
@@ -796,6 +812,9 @@ export function ProjectDetail() {
           );
         })}
       </div>
+      {browseEngine && projectId && (
+        <DatabaseBrowserModal projectId={projectId} engine={browseEngine} onClose={() => setBrowseEngine(null)} />
+      )}
     </div>
   );
 }

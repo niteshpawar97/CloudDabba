@@ -75,4 +75,32 @@ export class DatabaseController {
       next(error);
     }
   }
+
+  static async listTables(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const engine = req.params.engine as 'postgres' | 'mariadb';
+      const tables = await DatabaseProvisionService.listTables(req.params.id as string, req.user!.id, engine);
+      sendSuccess(res, tables);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getTableRows(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const engine = req.params.engine as 'postgres' | 'mariadb';
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      const offset = req.query.offset ? Number(req.query.offset) : undefined;
+      const data = await DatabaseProvisionService.getTableData(
+        req.params.id as string,
+        req.user!.id,
+        engine,
+        req.params.table as string,
+        { limit, offset }
+      );
+      sendSuccess(res, data);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -332,6 +332,141 @@ export class DatabaseProvisionService {
     };
   }
 
+  // --- Browse (list tables / rows) ---
+
+  static async listTables(projectId: string, userId: string, engine: 'postgres' | 'mariadb') {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+    const p = project as any;
+
+    if (engine === 'postgres') {
+      if (!p.dbEnabled || !p.dbPasswordEnc) throw new AppError('PostgreSQL not enabled for this project', 400);
+      const client = new Client({
+        connectionString: this.buildDatabaseUrl(p.dbUser, decrypt(p.dbPasswordEnc), p.dbName),
+        connectionTimeoutMillis: 5000,
+      });
+      try {
+        await client.connect();
+        const res = await client.query(
+          `SELECT c.relname AS table_name, c.reltuples::bigint AS row_estimate
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public' AND c.relkind = 'r'
+           ORDER BY c.relname`
+        );
+        return res.rows.map((r) => ({ name: r.table_name, rowEstimate: Number(r.row_estimate) }));
+      } catch (err: any) {
+        throw new AppError(`Failed to list tables: ${err.message}`, 500);
+      } finally {
+        await client.end().catch(() => {});
+      }
+    }
+
+    if (engine === 'mariadb') {
+      if (!p.mariadbEnabled || !p.mariadbPasswordEnc) throw new AppError('MariaDB not enabled for this project', 400);
+      const conn = await mysql.createConnection({
+        host: config.mariadb.host,
+        port: config.mariadb.port,
+        user: p.mariadbUser,
+        password: decrypt(p.mariadbPasswordEnc),
+        database: p.mariadbName,
+        connectTimeout: 5000,
+      });
+      try {
+        const [rows]: any = await conn.query(
+          `SELECT TABLE_NAME AS table_name, TABLE_ROWS AS row_estimate FROM information_schema.tables WHERE table_schema = ? ORDER BY TABLE_NAME`,
+          [p.mariadbName]
+        );
+        return rows.map((r: any) => ({ name: r.table_name, rowEstimate: Number(r.row_estimate || 0) }));
+      } catch (err: any) {
+        throw new AppError(`Failed to list tables: ${err.message}`, 500);
+      } finally {
+        await conn.end();
+      }
+    }
+
+    throw new AppError('Unsupported database engine', 400);
+  }
+
+  static async getTableData(
+    projectId: string,
+    userId: string,
+    engine: 'postgres' | 'mariadb',
+    table: string,
+    opts: { limit?: number; offset?: number } = {}
+  ) {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new AppError('Project not found', 404);
+    if (project.userId !== userId) throw new AppError('Unauthorized', 403);
+    const p = project as any;
+
+    const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), 200);
+    const offset = Math.max(Number(opts.offset) || 0, 0);
+
+    if (engine === 'postgres') {
+      if (!p.dbEnabled || !p.dbPasswordEnc) throw new AppError('PostgreSQL not enabled for this project', 400);
+      const client = new Client({
+        connectionString: this.buildDatabaseUrl(p.dbUser, decrypt(p.dbPasswordEnc), p.dbName),
+        connectionTimeoutMillis: 5000,
+      });
+      try {
+        await client.connect();
+        // Confirm the table exists in this database before interpolating its name into a query.
+        const check = await client.query(
+          `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = $1`,
+          [table]
+        );
+        if (check.rowCount === 0) throw new AppError('Table not found', 404);
+
+        const countRes = await client.query(`SELECT COUNT(*)::int AS count FROM "${table}"`);
+        const dataRes = await client.query(`SELECT * FROM "${table}" LIMIT $1 OFFSET $2`, [limit, offset]);
+        return {
+          columns: dataRes.fields.map((f) => f.name),
+          rows: dataRes.rows,
+          total: countRes.rows[0].count,
+          limit,
+          offset,
+        };
+      } finally {
+        await client.end().catch(() => {});
+      }
+    }
+
+    if (engine === 'mariadb') {
+      if (!p.mariadbEnabled || !p.mariadbPasswordEnc) throw new AppError('MariaDB not enabled for this project', 400);
+      const conn = await mysql.createConnection({
+        host: config.mariadb.host,
+        port: config.mariadb.port,
+        user: p.mariadbUser,
+        password: decrypt(p.mariadbPasswordEnc),
+        database: p.mariadbName,
+        connectTimeout: 5000,
+      });
+      try {
+        const [tableRows]: any = await conn.query(
+          `SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?`,
+          [p.mariadbName, table]
+        );
+        if (!tableRows.length) throw new AppError('Table not found', 404);
+
+        const [countRows]: any = await conn.query(`SELECT COUNT(*) AS count FROM \`${table}\``);
+        const [dataRows, fields]: any = await conn.query(`SELECT * FROM \`${table}\` LIMIT ? OFFSET ?`, [limit, offset]);
+        return {
+          columns: fields.map((f: any) => f.name),
+          rows: dataRows,
+          total: Number(countRows[0].count),
+          limit,
+          offset,
+        };
+      } finally {
+        await conn.end();
+      }
+    }
+
+    throw new AppError('Unsupported database engine', 400);
+  }
+
   static async listAllDatabases() {
     const projects = await prisma.project.findMany({
       where: { OR: [{ dbEnabled: true } as any, { redisEnabled: true } as any, { mariadbEnabled: true } as any] },

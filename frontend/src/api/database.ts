@@ -23,3 +23,16 @@ export const disableMariadb = (projectId: string) =>
 
 export const testDbConnection = (projectId: string) =>
   client.post<{ data: any }>(`/projects/${projectId}/database/test`).then((r) => r.data.data);
+
+export const listDbTables = (projectId: string, engine: 'postgres' | 'mariadb') =>
+  client.get<{ data: any }>(`/projects/${projectId}/database/${engine}/tables`).then((r) => r.data.data);
+
+export const getDbTableRows = (
+  projectId: string,
+  engine: 'postgres' | 'mariadb',
+  table: string,
+  params?: { limit?: number; offset?: number }
+) =>
+  client
+    .get<{ data: any }>(`/projects/${projectId}/database/${engine}/tables/${encodeURIComponent(table)}`, { params })
+    .then((r) => r.data.data);

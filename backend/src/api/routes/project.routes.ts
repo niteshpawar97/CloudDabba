@@ -47,5 +47,7 @@ router.delete('/:id/database/redis', authenticate, DatabaseController.disableRed
 router.post('/:id/database/mariadb', authenticate, DatabaseController.enableMariadb);
 router.delete('/:id/database/mariadb', authenticate, DatabaseController.disableMariadb);
 router.post('/:id/database/test', authenticate, DatabaseController.testConnection);
+router.get('/:id/database/:engine/tables', authenticate, DatabaseController.listTables);
+router.get('/:id/database/:engine/tables/:table', authenticate, DatabaseController.getTableRows);
 
 export default router;
