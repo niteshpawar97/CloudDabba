@@ -272,11 +272,14 @@ export class DeploymentService {
       for (const prev of previousDeployments) {
         if (prev.containerId) {
           await DockerService.stopContainer(prev.containerId);
-          await prisma.deployment.update({
-            where: { id: prev.id },
-            data: { status: 'STOPPED', finishedAt: new Date() },
-          });
         }
+        if (prev.dockerImageId) {
+          await DockerService.removeImage(prev.dockerImageId).catch(() => {});
+        }
+        await prisma.deployment.update({
+          where: { id: prev.id },
+          data: { status: 'STOPPED', finishedAt: new Date() },
+        });
       }
 
       // Step 6: Configure NGINX

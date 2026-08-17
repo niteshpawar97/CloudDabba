@@ -6,6 +6,7 @@ import { sendSuccess } from '../../shared/utils/api-response';
 import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
+import { ImageCleanupService } from '../../core/services/image-cleanup.service';
 import logger from '../../shared/utils/logger';
 
 function formatBytes(bytes: number): string {
@@ -517,23 +518,10 @@ export class AdminController {
     }
   }
 
-  // Cleanup all unused images
+  // Cleanup all unused images — manual trigger, no grace period (admin already reviewed the list)
   static async cleanupImages(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const images = await docker.listImages();
-      const containers = await docker.listContainers({ all: true });
-      const usedImages = new Set(containers.map((c: any) => c.ImageID));
-
-      let cleaned = 0;
-      for (const img of images) {
-        if (img.RepoTags?.some((t: string) => t.startsWith('clouddabba/')) && !usedImages.has(img.Id)) {
-          try {
-            await docker.getImage(img.Id).remove({ force: true });
-            cleaned++;
-          } catch {}
-        }
-      }
-
+      const cleaned = await ImageCleanupService.cleanupUnusedImages(0);
       sendSuccess(res, { cleaned }, `${cleaned} unused images removed`);
     } catch (error) {
       next(error);

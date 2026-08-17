@@ -4,6 +4,7 @@ import { config } from './shared/config/app.config';
 import { setupWebSocket } from './infrastructure/websocket/log-stream';
 import prisma from './database/connection';
 import logger from './shared/utils/logger';
+import { ImageCleanupService } from './core/services/image-cleanup.service';
 
 const server = http.createServer(app);
 
@@ -22,6 +23,8 @@ async function start() {
       logger.info(`Environment: ${config.app.nodeEnv}`);
       logger.info(`API: http://localhost:${config.app.port}/api/${config.app.apiVersion}`);
     });
+
+    ImageCleanupService.startScheduler();
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

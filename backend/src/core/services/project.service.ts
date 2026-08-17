@@ -1,5 +1,6 @@
 import prisma from '../../database/connection';
 import { AppError } from '../types';
+import { DockerService } from './docker.service';
 
 // Reserved subdomains that can't be used
 const RESERVED_SUBDOMAINS = ['www', 'api', 'app', 'admin', 'mail', 'ftp', 'ns1', 'ns2', 'panel', 'dashboard', 'login', 'signup', 'auth'];
@@ -144,7 +145,7 @@ export class ProjectService {
   static async delete(projectId: string, userId: string) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      include: { deployments: { orderBy: { startedAt: 'desc' }, take: 1 } },
+      include: { deployments: { orderBy: { startedAt: 'desc' } } },
     });
     if (!project) throw new AppError('Project not found', 404);
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
@@ -160,6 +161,17 @@ export class ProjectService {
         await exec('docker', ['compose', '-p', composeProjectName, 'down', '-v', '--remove-orphans'], { timeout: 60000 });
       } catch {
         // Non-fatal — orphaned containers can be cleaned up via docker admin tools
+      }
+    } else {
+      // Single-container deployments: stop/remove each deployment's container and image
+      // so nothing is left running or taking up disk after the project is gone.
+      for (const dep of project.deployments) {
+        if (dep.containerId) {
+          await DockerService.stopContainer(dep.containerId).catch(() => {});
+        }
+        if (dep.dockerImageId) {
+          await DockerService.removeImage(dep.dockerImageId).catch(() => {});
+        }
       }
     }
 
