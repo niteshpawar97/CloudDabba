@@ -75,6 +75,9 @@ export function ProjectDetail() {
   const [newEnvKey, setNewEnvKey] = useState('');
   const [newEnvValue, setNewEnvValue] = useState('');
   const [envSaving, setEnvSaving] = useState(false);
+  const [editingEnvKey, setEditingEnvKey] = useState<string | null>(null);
+  const [editEnvValue, setEditEnvValue] = useState('');
+  const [envKeyDeleting, setEnvKeyDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     getConfig().then((c) => setBaseDomain(c.baseDomain)).catch(() => {});
@@ -202,6 +205,34 @@ export function ProjectDetail() {
       toast.success('Environment variable added');
     } catch { toast.error('Failed to update env vars'); }
     setEnvSaving(false);
+  };
+
+  const handleSaveEnvEdit = async (key: string) => {
+    if (!project) return;
+    setEnvSaving(true);
+    try {
+      const current = (project.envVars as Record<string, string>) || {};
+      await updateEnvVars(project.id, { ...current, [key]: editEnvValue });
+      const updated = await getProject(project.id);
+      setProject(updated);
+      setEditingEnvKey(null);
+      toast.success('Environment variable updated');
+    } catch { toast.error('Failed to update env vars'); }
+    setEnvSaving(false);
+  };
+
+  const handleDeleteEnv = async (key: string) => {
+    if (!project || !confirm(`Delete environment variable "${key}"?`)) return;
+    setEnvKeyDeleting(key);
+    try {
+      const current = (project.envVars as Record<string, string>) || {};
+      const { [key]: _, ...rest } = current;
+      await updateEnvVars(project.id, rest);
+      const updated = await getProject(project.id);
+      setProject(updated);
+      toast.success('Environment variable deleted');
+    } catch { toast.error('Failed to delete env var'); }
+    setEnvKeyDeleting(null);
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -737,11 +768,54 @@ export function ProjectDetail() {
               <div className="space-y-1.5">
                 {envKeys.map((key) => (
                   <div key={key} className="flex items-center gap-2 bg-[#0a0e14] rounded-lg px-3 py-2 text-xs font-mono">
-                    <span className="text-blue-400">{key}</span>
+                    <span className="text-blue-400 shrink-0">{key}</span>
                     <span className="text-slate-600">=</span>
-                    <span className="text-slate-400 flex-1 truncate">
-                      {envMasked ? '••••••••' : envVars[key]}
-                    </span>
+                    {editingEnvKey === key ? (
+                      <>
+                        <Input
+                          value={editEnvValue}
+                          onChange={(e) => setEditEnvValue(e.target.value)}
+                          className="flex-1 text-xs py-1 font-mono"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveEnvEdit(key)}
+                          disabled={envSaving}
+                          className="text-slate-500 hover:text-green-400 shrink-0 disabled:opacity-40"
+                          title="Save"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingEnvKey(null)}
+                          className="text-slate-500 hover:text-white shrink-0"
+                          title="Cancel"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-slate-400 flex-1 truncate">
+                          {envMasked ? '••••••••' : envVars[key]}
+                        </span>
+                        <button
+                          onClick={() => { setEditingEnvKey(key); setEditEnvValue(envVars[key]); }}
+                          className="text-slate-500 hover:text-blue-400 shrink-0"
+                          title="Edit"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEnv(key)}
+                          disabled={envKeyDeleting === key}
+                          className="text-slate-500 hover:text-red-400 shrink-0 disabled:opacity-40"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
                 <button onClick={() => setEnvMasked(!envMasked)} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1">
