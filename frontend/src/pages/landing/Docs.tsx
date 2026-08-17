@@ -36,8 +36,8 @@ function H2({ id, children }: { id: string; children: string }) {
   return <h2 id={id} className="text-2xl font-bold text-white mt-12 mb-4 scroll-mt-24">{children}</h2>;
 }
 
-function H3({ children }: { children: any }) {
-  return <h3 className="text-lg font-semibold text-white mt-8 mb-3">{children}</h3>;
+function H3({ id, children }: { id?: string; children: any }) {
+  return <h3 id={id} className="text-lg font-semibold text-white mt-8 mb-3 scroll-mt-24">{children}</h3>;
 }
 
 function P({ children }: { children: any }) {
@@ -175,6 +175,25 @@ sudo ./uninstall.sh --keep-docker`}</Code>
             <li><strong className="text-slate-300">CUSTOM_DOCKERFILE</strong> — bring your own Dockerfile</li>
           </ul>
 
+          <H3 id="custom-dockerfile-escape-hatch">Custom Dockerfile (escape hatch)</H3>
+          <P>
+            If auto-detection guesses wrong, or your stack isn't one of the types above, commit a <Inline>Dockerfile</Inline> to the repo root and select <strong className="text-slate-300">Custom Dockerfile</strong> in the wizard — or leave the detected type as-is, since a root <Inline>Dockerfile</Inline> always wins over CloudDabba's own template generation, regardless of what's selected.
+          </P>
+          <P>Minimal example for a generic Node app:</P>
+          <Code>{`FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]`}</Code>
+          <ul className="list-disc list-inside text-slate-400 space-y-1.5 mb-4">
+            <li><Inline>EXPOSE</Inline> the port your app listens on — CloudDabba reads it to route traffic</li>
+            <li>The container must stay running in the foreground (don't daemonize the process)</li>
+            <li>Env vars set in the wizard/project page are injected at runtime the same as for auto-detected types</li>
+          </ul>
+
           <H3>Subdirectory apps</H3>
           <P>If the package.json lives in a subdirectory (e.g. <Inline>/notes-app/package.json</Inline>), CloudDabba detects it and hoists the subdirectory to root before building — same as Vercel.</P>
 
@@ -288,6 +307,12 @@ curl -v http://yourdomain.com    # from your laptop, not the VPS`}</Code>
 
           <H3>SPA deep links return 404 (e.g. /about loads but refresh 404s)</H3>
           <P>Fixed in current builds — CloudDabba bakes <Inline>try_files $uri $uri/ /index.html;</Inline> into the SPA nginx template. Redeploy after updating.</P>
+
+          <H3>Deploy fails, or Smart Detection picks the wrong project type</H3>
+          <P>
+            Auto-detection is a best guess from repo structure — it can get it wrong for uncommon layouts, monorepos, or unrecognized frameworks. The reliable fix for any project type: commit a <Inline>Dockerfile</Inline> to the repo root and select <strong className="text-slate-300">Custom Dockerfile</strong> in the deploy wizard (see{' '}
+            <a href="#custom-dockerfile-escape-hatch" className="text-blue-400 hover:underline">Custom Dockerfile</a> above). The live build log also prints this tip automatically whenever a deployment fails.
+          </P>
 
           <H3>More help</H3>
           <P>

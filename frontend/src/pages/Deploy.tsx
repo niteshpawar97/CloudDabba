@@ -483,6 +483,11 @@ export function Deploy() {
                   )}
                 </div>
               </div>
+              {detectedType.confidence === 'low' && (
+                <p className="text-[11px] text-slate-500">
+                  Not confident about this one — if the build fails, add a <code className="text-blue-400">Dockerfile</code> to your repo root and pick <strong className="text-slate-300">Custom Dockerfile</strong> below for full control over the build.
+                </p>
+              )}
             </div>
           )}
           {scanning && (
@@ -508,6 +513,9 @@ export function Deploy() {
               <option value="DOCKER_COMPOSE">Docker Compose (multi-service apps)</option>
               <option value="ERPNEXT">ERPNext / Frappe (auto-provisions MariaDB + Redis)</option>
             </select>
+            <p className="text-[11px] text-slate-500 mt-1.5">
+              Detection wrong, or your stack isn't listed? Commit a <code className="text-blue-400">Dockerfile</code> to the repo root and pick <strong className="text-slate-300">Custom Dockerfile</strong> — CloudDabba will build it as-is.
+            </p>
           </div>
 
           {/* ERPNext-specific notice: MariaDB + Redis are mandatory, SITE_NAME +

@@ -22,6 +22,29 @@ CloudDabba auto-detects the type from your repo contents. Manual override is ava
 | `DOCKER_COMPOSE` | `docker-compose.yml` in root | `docker compose up -d --build` |
 | `CUSTOM_DOCKERFILE` | `Dockerfile` in root | Your own Dockerfile |
 
+## Custom Dockerfile (escape hatch)
+
+If auto-detection guesses wrong, or your stack isn't one of the types above, commit a `Dockerfile` to the repo root and select **Custom Dockerfile** in the wizard (or let auto-detection pick it up automatically — a root `Dockerfile` always wins over the built-in templates, regardless of what type is selected). CloudDabba builds it exactly as-is and skips its own template generation entirely.
+
+Minimal example for a generic Node app:
+
+```dockerfile
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+Requirements:
+
+- `EXPOSE` the port your app listens on — CloudDabba reads it to route traffic (or set `PORT` via an env var and expose that).
+- The container should stay running in the foreground (don't daemonize/background the process).
+- Env vars set in the deploy wizard/project page are injected at runtime the same way as for auto-detected types.
+
 ## Subdirectory apps
 
 If `package.json` lives in a subdirectory (e.g. `/notes-app/package.json`), CloudDabba detects it and hoists the subdirectory to root before building — same as Vercel.

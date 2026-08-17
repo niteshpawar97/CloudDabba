@@ -312,6 +312,11 @@ export class DeploymentService {
     } catch (error: any) {
       logger.error(`Deployment ${deploymentId} failed:`, error);
       await LogService.createLog(deploymentId, 'SYSTEM', `Deployment failed: ${error.message}`);
+      await LogService.createLog(
+        deploymentId,
+        'SYSTEM',
+        'Tip: if auto-detection picked the wrong build for your project, add a Dockerfile to your repo root and redeploy with "Custom Dockerfile" selected — CloudDabba will build it as-is.'
+      );
       await this.updateStatus(deploymentId, 'FAILED');
       await prisma.deployment.update({
         where: { id: deploymentId },

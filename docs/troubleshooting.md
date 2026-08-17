@@ -76,6 +76,12 @@ Usually the app crashes on startup. Check env vars are set correctly — especia
 
 Build-time env vars not set. Add them in the deploy wizard or project page — CloudDabba now writes them to `.env`, `.env.local`, `.env.production`, and `.env.production.local` in the build context, so `next build` can read them.
 
+## Deploy fails, or Smart Detection picks the wrong project type
+
+Auto-detection is a best guess from repo structure — it can get it wrong for uncommon layouts, monorepos, or frameworks it doesn't recognize. The reliable fix for any project type: commit a `Dockerfile` to the repo root and select **Custom Dockerfile** in the deploy wizard (or leave the type as-is — a root `Dockerfile` is always used over the generated one). See [Custom Dockerfile](deploying-apps.md#custom-dockerfile-escape-hatch) for a minimal example and requirements.
+
+The live build log (`/logs/:deploymentId`) also prints this tip automatically whenever a deployment fails.
+
 ## More help
 
 Open an issue at https://github.com/niteshpawar97/CloudDabba/issues with:
