@@ -10,6 +10,32 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.6.0',
+    date: '2026-08-17',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Project ownership transfer',
+        description: 'Transfer a project to another registered CloudDabba account by email, right from the project page.',
+      },
+      {
+        type: 'feature',
+        title: 'Automatic Docker image cleanup',
+        description: 'Unused build images are now cleaned up automatically every 6 hours, and are also removed as soon as a redeploy or project delete makes them obsolete — no more unbounded disk growth.',
+      },
+      {
+        type: 'feature',
+        title: 'Per-project database viewer',
+        description: 'Browse tables and paginated rows of a project\'s provisioned PostgreSQL or MariaDB database directly from the Databases card.',
+      },
+      {
+        type: 'improvement',
+        title: 'Editable environment variables',
+        description: 'Environment variables can now be edited or deleted individually, not just added.',
+      },
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-04-16',
     changes: [
