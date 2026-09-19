@@ -100,8 +100,13 @@ export class DeploymentService {
         await this.hoistSubdirectory(buildDir, detection.appDir);
       }
 
-      // Prefer auto-detection (full filesystem access) over stored type when confident
-      const buildType = (detection.confidence !== 'low') ? detectedType : (project.projectType || detectedType);
+      // The stored project type is never a guess - it's exactly what the user
+      // picked (or confirmed) in the deploy wizard, including any deliberate
+      // override of the wizard's own suggestion (e.g. "Custom Dockerfile" for
+      // a repo that also happens to ship a docker-compose.yml for local dev).
+      // That explicit choice must always win; auto-detection only fills in
+      // when a project somehow has no type recorded at all.
+      const buildType = project.projectType || detectedType;
 
       // Write project env vars to .env files BEFORE any branching, so:
       //  - build-time code (next build, vite build, prisma generate) reads them
