@@ -118,6 +118,11 @@ check_and_install_deps() {
   if ! command -v docker &>/dev/null; then
     info "Installing Docker..."
     run sudo apt-get install -y docker.io
+    # Default log rotation for every container (fresh installs only; never overwrites an existing config)
+    if [ ! -f /etc/docker/daemon.json ]; then
+      sudo mkdir -p /etc/docker
+      echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' | sudo tee /etc/docker/daemon.json >/dev/null
+    fi
     run_quiet sudo systemctl enable docker
     run_quiet sudo systemctl start docker
     sudo usermod -aG docker "$USER" 2>/dev/null || true

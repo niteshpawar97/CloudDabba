@@ -1,5 +1,6 @@
 import docker from '../../infrastructure/docker/docker-client';
 import logger from '../../shared/utils/logger';
+import { DeployLockService } from './deploy-lock.service';
 
 // Never touch images built more recently than this — a deploy in flight
 // (image built, container not started yet) must not get swept up.
@@ -7,6 +8,20 @@ const DEFAULT_GRACE_MS = 60 * 60 * 1000;
 
 export class ImageCleanupService {
   static async cleanupUnusedImages(graceMs = DEFAULT_GRACE_MS): Promise<number> {
+    // Never sweep images while a deploy/build or another cleanup is in flight.
+    const lock = await DeployLockService.tryBeginCleanup();
+    if ('reason' in lock) {
+      logger.info(`Image cleanup skipped: ${lock.reason}`);
+      return 0;
+    }
+    try {
+      return await this.sweep(graceMs);
+    } finally {
+      lock.release();
+    }
+  }
+
+  private static async sweep(graceMs: number): Promise<number> {
     const images = await docker.listImages();
     const containers = await docker.listContainers({ all: true });
     const usedImageIds = new Set(containers.map((c: any) => c.ImageID));

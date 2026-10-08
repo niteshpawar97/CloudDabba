@@ -4,6 +4,7 @@ import { Spinner } from '../../components/ui/Spinner';
 import { DeploymentStatusBadge } from '../../components/DeploymentStatusBadge';
 import { Users, FolderOpen, Rocket, CheckCircle, XCircle, Container, Image, Database } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { StorageCard } from '../../components/admin/StorageCard';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
 function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
@@ -56,6 +57,8 @@ export function AdminDashboard() {
         <StatCard icon={Image} label="Docker Images" value={stats?.images || 0} color="text-pink-400" />
         <StatCard icon={Database} label="PostgreSQL DBs" value={stats?.provisionedDbs || 0} color="text-emerald-400" />
       </div>
+
+      <StorageCard />
 
       {/* Chart */}
       <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-6 mb-8">

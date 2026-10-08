@@ -5,6 +5,7 @@ import { setupWebSocket } from './infrastructure/websocket/log-stream';
 import prisma from './database/connection';
 import logger from './shared/utils/logger';
 import { ImageCleanupService } from './core/services/image-cleanup.service';
+import { StorageManagerService } from './core/services/storage-manager.service';
 
 const server = http.createServer(app);
 
@@ -25,6 +26,7 @@ async function start() {
     });
 
     ImageCleanupService.startScheduler();
+    StorageManagerService.startMonitor();
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

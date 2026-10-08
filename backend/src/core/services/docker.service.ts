@@ -88,6 +88,8 @@ export class DockerService {
         Memory: 512 * 1024 * 1024, // 512MB
         NanoCpus: 500000000,        // 0.5 CPU
         RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 },
+        // Cap container logs so a chatty app cannot fill the disk
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
       Labels: {
         'clouddabba.managed': 'true',
