@@ -89,3 +89,23 @@ Open an issue at https://github.com/niteshpawar97/CloudDabba/issues with:
 - Output of `pm2 logs clouddabba-api --lines 50 --nostream`
 - Output of `sudo nginx -T 2>/dev/null | head -100`
 - What you were doing when the issue happened
+
+## Disk filling up / automatic storage management
+
+CloudDabba checks disk usage every 10 minutes (admin dashboard → **Docker Storage**):
+
+| Usage | Action |
+|-------|--------|
+| ≥ 80% | Warning logged + shown in the dashboard |
+| ≥ 90% | Cleanup: build cache older than 24h, dangling / old CloudDabba images |
+| ≥ 95% | Emergency: all unused build cache and all unused images |
+
+Never touched: running or stopped containers' images, images of LIVE deployments, Postgres/MySQL/MariaDB/Redis images, and **all Docker volumes** (database data). Cleanup is skipped whenever a deployment/build is running. The **Safe Cleanup** button runs the emergency-level steps on demand; every run is recorded in the cleanup history.
+
+Tunables (env): `STORAGE_AUTO_CLEANUP=false`, `STORAGE_WARN_PCT`, `STORAGE_CLEANUP_PCT`, `STORAGE_EMERGENCY_PCT`, `STORAGE_CHECK_INTERVAL_MIN`.
+
+**Log rotation:** new app containers get `json-file` logs capped at 3 × 10 MB. For all other containers, set a daemon default in `/etc/docker/daemon.json` (fresh installs do this automatically) and restart Docker; existing containers must be recreated to pick it up:
+
+```json
+{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }
+```

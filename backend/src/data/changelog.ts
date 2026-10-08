@@ -10,6 +10,27 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.7.0',
+    date: '2026-10-08',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Automatic Docker storage management',
+        description: 'Disk usage is monitored: warning at 80%, cleanup at 90%, emergency cleanup at 95%. Only build cache and unused images are removed - running containers, active images and all volumes (databases) are never touched, and nothing runs during a deployment.',
+      },
+      {
+        type: 'feature',
+        title: 'Storage dashboard + Safe Cleanup',
+        description: 'Admin dashboard now shows disk usage, images, build cache, reclaimable space and cleanup history, with a manual Safe Cleanup button.',
+      },
+      {
+        type: 'improvement',
+        title: 'Container log rotation',
+        description: 'Deployed containers now cap their logs at 3 x 10 MB so chatty apps cannot fill the disk.',
+      },
+    ],
+  },
+  {
     version: '1.6.0',
     date: '2026-08-17',
     changes: [

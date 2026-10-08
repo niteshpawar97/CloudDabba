@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getUsers, updateUserRole, deleteUser } from '../../api/admin';
+import { getUsers, updateUserRole, deleteUser, setUserApproval, impersonateUser } from '../../api/admin';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
-import { Search, Trash2, Shield, User } from 'lucide-react';
+import { Search, Trash2, Shield, User, UserCheck, UserX, LogIn } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminUsers() {
@@ -29,6 +29,26 @@ export function AdminUsers() {
     if (!confirm(`Change role to ${newRole}?`)) return;
     await updateUserRole(id, newRole);
     fetchUsers();
+  };
+
+  const handleApproval = async (id: string, approved: boolean) => {
+    await setUserApproval(id, approved);
+    fetchUsers();
+  };
+
+  const handleImpersonate = async (id: string, name: string) => {
+    if (!confirm(`Log in as "${name}"? You can return to your admin account from the banner.`)) return;
+    try {
+      const res = await impersonateUser(id);
+      // Keep the admin's own token so the banner can switch back
+      if (!localStorage.getItem('adminToken')) {
+        localStorage.setItem('adminToken', localStorage.getItem('token') || '');
+      }
+      localStorage.setItem('token', res.token);
+      window.location.href = '/dashboard';
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Failed to impersonate user');
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -72,6 +92,9 @@ export function AdminUsers() {
                   <Badge variant={u.role === 'admin' ? 'danger' : 'default'}>
                     {u.role === 'admin' ? 'Admin' : 'User'}
                   </Badge>
+                  {u.role !== 'admin' && !u.approved && (
+                    <Badge variant="warning" >Pending</Badge>
+                  )}
                 </td>
                 <td className="py-3 px-4">
                   <Badge variant={u.hasPAT ? 'success' : 'default'}>
@@ -82,6 +105,22 @@ export function AdminUsers() {
                 <td className="py-3 px-4 text-slate-500 text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td className="py-3 px-4">
                   <div className="flex gap-2">
+                    {u.role !== 'admin' && (
+                      <button
+                        onClick={() => handleApproval(u.id, !u.approved)}
+                        className={`p-1.5 rounded hover:bg-white/10 transition-colors ${u.approved ? 'text-slate-400 hover:text-amber-400' : 'text-amber-400 hover:text-green-400'}`}
+                        title={u.approved ? 'Revoke approval' : 'Approve user'}
+                      >
+                        {u.approved ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleImpersonate(u.id, u.name)}
+                      className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-green-400 transition-colors"
+                      title="Login as this user"
+                    >
+                      <LogIn className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleRoleChange(u.id, u.role)}
                       className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-blue-400 transition-colors"

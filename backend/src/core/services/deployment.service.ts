@@ -12,6 +12,7 @@ import { allocatePort } from '../../shared/utils/port-allocator';
 import { broadcastStatus } from '../../infrastructure/websocket/log-stream';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
+import { DeployLockService } from './deploy-lock.service';
 
 export class DeploymentService {
   static async triggerDeploy(projectId: string, userId: string) {
@@ -28,9 +29,14 @@ export class DeploymentService {
     });
 
     // Run deploy pipeline async
-    this.runPipeline(deployment.id, project.id, userId).catch((err) => {
-      logger.error(`Deploy pipeline failed for ${deployment.id}:`, err);
-    });
+    // The lock is held for the whole pipeline so storage cleanup never runs mid-build.
+    // acquire() waits if a cleanup is currently in progress.
+    DeployLockService.acquire(deployment.id)
+      .then(() => this.runPipeline(deployment.id, project.id, userId))
+      .catch((err) => {
+        logger.error(`Deploy pipeline failed for ${deployment.id}:`, err);
+      })
+      .finally(() => DeployLockService.release(deployment.id));
 
     return deployment;
   }
@@ -601,6 +607,13 @@ export class DeploymentService {
         services[svc].ports = [`127.0.0.1:${allocatedHostPort}:${plan.mainContainerPort}`];
       } else {
         services[svc].ports = (containerPorts as number[]).map((cp) => `127.0.0.1::${cp}`);
+      }
+    }
+
+    // Cap container logs for services that don't configure their own logging
+    for (const svc of Object.values<any>(services)) {
+      if (svc && typeof svc === 'object' && !svc.logging) {
+        svc.logging = { driver: 'json-file', options: { 'max-size': '10m', 'max-file': '3' } };
       }
     }
 

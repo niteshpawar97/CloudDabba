@@ -13,6 +13,8 @@ model User {
   password           String    @db.VarChar(255)
   name               String    @db.VarChar(100)
   role               String    @default("user") @db.VarChar(20)
+  // New public signups start unapproved; existing rows and admins default to approved
+  approved           Boolean   @default(true)
   githubPatEncrypted String?   @map("github_pat_encrypted") @db.Text
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
@@ -142,4 +144,20 @@ model PlatformSettings {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("platform_settings")
+}
+
+model StorageCleanupLog {
+  id             String   @id @default(uuid())
+  trigger        String   @db.VarChar(20)  // AUTO | MANUAL
+  level          String   @db.VarChar(20)  // WARNING | CLEANUP | EMERGENCY | SAFE
+  status         String   @db.VarChar(20)  // SUCCESS | SKIPPED | FAILED
+  usageBefore    Float    @map("usage_before")
+  usageAfter     Float?   @map("usage_after")
+  bytesReclaimed BigInt   @default(0) @map("bytes_reclaimed")
+  imagesRemoved  Int      @default(0) @map("images_removed")
+  details        String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("storage_cleanup_logs")
 }

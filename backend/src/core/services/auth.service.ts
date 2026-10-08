@@ -22,13 +22,19 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword },
+    // The very first account on a fresh install is approved automatically;
+    // everyone after needs an admin to approve them before they can log in.
+    const isFirstUser = (await prisma.user.count()) === 0;
+    const user = await (prisma.user.create as any)({
+      data: { name, email, password: hashedPassword, approved: isFirstUser },
       select: { id: true, name: true, email: true, createdAt: true },
     });
 
+    if (!isFirstUser) {
+      return { user, token: null, pendingApproval: true };
+    }
     const token = this.generateToken(user.id, user.email);
-    return { user, token };
+    return { user, token, pendingApproval: false };
   }
 
   static async login(email: string, password: string) {
@@ -40,6 +46,10 @@ export class AuthService {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       throw new AppError('Invalid email or password', 401);
+    }
+
+    if ((user as any).role !== 'admin' && (user as any).approved === false) {
+      throw new AppError('Your account is pending admin approval. You can log in once an admin approves it.', 403);
     }
 
     const token = this.generateToken(user.id, user.email);
@@ -59,10 +69,13 @@ export class AuthService {
   static async getProfile(userId: string) {
     const user = await (prisma.user.findUnique as any)({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, githubPatEncrypted: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, approved: true, githubPatEncrypted: true, createdAt: true },
     });
     if (!user) {
       throw new AppError('User not found', 404);
+    }
+    if (user.role !== 'admin' && user.approved === false) {
+      throw new AppError('Your account is pending admin approval.', 403);
     }
     return {
       id: user.id,
@@ -100,9 +113,26 @@ export class AuthService {
     return decrypt(user.githubPatEncrypted);
   }
 
-  static generateToken(id: string, email: string): string {
-    return jwt.sign({ id, email }, config.jwt.secret, {
-      expiresIn: config.jwt.expire,
-    } as jwt.SignOptions);
+  static generateToken(id: string, email: string, opts?: { impersonatedBy?: string; expiresIn?: string }): string {
+    return jwt.sign(
+      { id, email, ...(opts?.impersonatedBy ? { impersonatedBy: opts.impersonatedBy } : {}) },
+      config.jwt.secret,
+      { expiresIn: opts?.expiresIn || config.jwt.expire } as jwt.SignOptions,
+    );
+  }
+
+  /** Admin-only (enforced by route): issue a short-lived token for another user. */
+  static async impersonate(adminId: string, targetId: string) {
+    if (adminId === targetId) throw new AppError('You are already logged in as this user', 400);
+    const target = await (prisma.user.findUnique as any)({ where: { id: targetId } });
+    if (!target) throw new AppError('User not found', 404);
+    const token = this.generateToken(target.id, target.email, { impersonatedBy: adminId, expiresIn: '2h' });
+    return {
+      token,
+      user: {
+        id: target.id, name: target.name, email: target.email, role: target.role || 'user',
+        hasPAT: !!target.githubPatEncrypted, createdAt: target.createdAt,
+      },
+    };
   }
 }

@@ -12,6 +12,12 @@ export const getUsers = (page = 1, search = '') =>
 export const updateUserRole = (id: string, role: string) =>
   client.put(`/admin/users/${id}/role`, { role });
 
+export const setUserApproval = (id: string, approved: boolean) =>
+  client.put(`/admin/users/${id}/approval`, { approved });
+
+export const impersonateUser = (id: string) =>
+  client.post<{ data: { token: string; user: any } }>(`/admin/users/${id}/impersonate`).then((r) => r.data.data);
+
 export const deleteUser = (id: string) =>
   client.delete(`/admin/users/${id}`);
 
@@ -166,3 +172,40 @@ export const adminDeleteMariadb = (projectId: string) =>
 
 export const adminDeleteRedis = (projectId: string) =>
   client.delete(`/admin/databases/${projectId}/redis`);
+
+// ---- Automatic storage management ----
+export interface StorageCleanupEntry {
+  id: string;
+  trigger: 'AUTO' | 'MANUAL';
+  level: string;
+  status: 'SUCCESS' | 'SKIPPED' | 'FAILED';
+  usageBefore: number;
+  usageAfter: number | null;
+  bytesReclaimed: number;
+  imagesRemoved: number;
+  details: string | null;
+  createdAt: string;
+}
+
+export interface StorageStatus {
+  disk: { totalBytes: number; usedBytes: number; freeBytes: number; usedPercent: number; path: string };
+  level: 'OK' | 'WARNING' | 'CLEANUP' | 'EMERGENCY';
+  thresholds: { warning: number; cleanup: number; emergency: number };
+  autoCleanupEnabled: boolean;
+  docker: {
+    images: { count: number; totalBytes: number; unusedCount: number; reclaimableBytes: number };
+    buildCache: { count: number; totalBytes: number; reclaimableBytes: number };
+    containers: { count: number };
+    volumes: { count: number; sizeBytes: number; protected: boolean };
+  };
+  reclaimableBytes: number;
+  busy: string | null;
+  lastCleanup: StorageCleanupEntry | null;
+}
+
+export const getStorageStatus = () =>
+  client.get<{ data: StorageStatus }>('/admin/storage/status').then((r) => r.data.data);
+export const getStorageHistory = (limit = 20) =>
+  client.get<{ data: StorageCleanupEntry[] }>(`/admin/storage/history?limit=${limit}`).then((r) => r.data.data);
+export const runSafeCleanup = () =>
+  client.post<{ message: string }>('/admin/storage/safe-cleanup').then((r) => r.data);

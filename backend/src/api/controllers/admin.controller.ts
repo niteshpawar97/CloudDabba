@@ -3,11 +3,21 @@ import prisma from '../../database/connection';
 import docker from '../../infrastructure/docker/docker-client';
 import { AuthRequest, AppError } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
+import { AuthService } from '../../core/services/auth.service';
 import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import { ImageCleanupService } from '../../core/services/image-cleanup.service';
+import { StorageManagerService } from '../../core/services/storage-manager.service';
+import { DeployLockService } from '../../core/services/deploy-lock.service';
 import logger from '../../shared/utils/logger';
+
+// Manual prune endpoints must obey the same rule as automatic cleanup:
+// never run while a deployment/build is in flight.
+async function assertNoActiveDeploy() {
+  const busy = await DeployLockService.busyReason();
+  if (busy) throw new AppError(`Cleanup blocked: ${busy}. Try again when deployments finish.`, 409);
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`;
@@ -106,7 +116,7 @@ export class AdminController {
         (prisma.user.findMany as any)({
           where,
           select: {
-            id: true, name: true, email: true, role: true, createdAt: true,
+            id: true, name: true, email: true, role: true, approved: true, createdAt: true,
             githubPatEncrypted: true,
             _count: { select: { projects: true } },
           },
@@ -122,12 +132,41 @@ export class AdminController {
         name: u.name,
         email: u.email,
         role: u.role,
+        approved: u.approved !== false,
         hasPAT: !!u.githubPatEncrypted,
         projectCount: u._count.projects,
         createdAt: u.createdAt,
       }));
 
       sendSuccess(res, { users: formatted, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Approve / revoke a pending user
+  static async setUserApproval(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const approved = req.body?.approved !== false;
+      if (!approved && req.params.id === req.user!.id) throw new AppError('Cannot revoke yourself', 400);
+      const user = await (prisma.user.update as any)({
+        where: { id: req.params.id as string },
+        data: { approved },
+        select: { id: true, name: true, email: true, approved: true },
+      });
+      logger.info(`Admin ${req.user!.email} ${approved ? 'approved' : 'revoked'} user ${user.email}`);
+      sendSuccess(res, user, approved ? 'User approved' : 'User approval revoked');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Log in as another user without their password (admin only)
+  static async impersonateUser(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await AuthService.impersonate(req.user!.id, req.params.id as string);
+      logger.warn(`Admin ${req.user!.email} impersonating user ${result.user.email}`);
+      sendSuccess(res, result, 'Impersonation started');
     } catch (error) {
       next(error);
     }
@@ -521,6 +560,7 @@ export class AdminController {
   // Cleanup all unused images — manual trigger, no grace period (admin already reviewed the list)
   static async cleanupImages(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      await assertNoActiveDeploy();
       const cleaned = await ImageCleanupService.cleanupUnusedImages(0);
       sendSuccess(res, { cleaned }, `${cleaned} unused images removed`);
     } catch (error) {
@@ -534,6 +574,7 @@ export class AdminController {
   // are never touched — only stopped/exited ones and unreferenced images/cache.
   static async pruneStoppedContainers(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      await assertNoActiveDeploy();
       const result: any = await (docker as any).pruneContainers();
       const removed = (result?.ContainersDeleted || []).length;
       const reclaimed = result?.SpaceReclaimed || 0;
@@ -545,6 +586,7 @@ export class AdminController {
 
   static async pruneUnusedImages(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      await assertNoActiveDeploy();
       // dangling:false makes this equivalent to `docker image prune -a` — removes
       // all images not referenced by any container, not just dangling ones.
       const result: any = await (docker as any).pruneImages({ filters: { dangling: { false: true } } });
@@ -558,6 +600,7 @@ export class AdminController {
 
   static async pruneSystem(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      await assertNoActiveDeploy();
       // `docker system prune -a` = containers + images(-a) + networks + build cache.
       // Dockerode doesn't expose buildkit cache prune via the typed API, so we
       // run the three the SDK supports and report cumulative numbers.
@@ -577,6 +620,34 @@ export class AdminController {
         { containersRemoved, imagesRemoved, networksRemoved, reclaimed },
         `Pruned ${containersRemoved} containers, ${imagesRemoved} images, ${networksRemoved} networks (${formatBytes(reclaimed)} reclaimed)`,
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Automatic storage management
+  static async getStorageStatus(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await StorageManagerService.getStatus());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getStorageHistory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await StorageManagerService.getHistory(Number(req.query.limit) || 50));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async safeStorageCleanup(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const r = await StorageManagerService.safeCleanup();
+      if (r.status === 'SKIPPED') throw new AppError(`Safe cleanup not run - ${r.details.replace('Skipped: ', '')}`, 409);
+      if (r.status === 'FAILED') throw new AppError(`Safe cleanup failed: ${r.details}`, 500);
+      sendSuccess(res, r, `Safe cleanup done: ${formatBytes(r.bytesReclaimed)} reclaimed, ${r.imagesRemoved} image(s) removed`);
     } catch (error) {
       next(error);
     }
