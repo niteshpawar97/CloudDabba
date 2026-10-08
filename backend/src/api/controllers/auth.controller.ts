@@ -8,7 +8,13 @@ export class AuthController {
     try {
       const { name, email, password } = req.body;
       const result = await AuthService.signup(name, email, password);
-      sendCreated(res, result, 'User registered successfully');
+      sendCreated(
+        res,
+        result,
+        result.pendingApproval
+          ? 'Account created. An admin must approve it before you can log in.'
+          : 'User registered successfully',
+      );
     } catch (error) {
       next(error);
     }

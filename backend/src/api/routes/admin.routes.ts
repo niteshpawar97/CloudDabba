@@ -14,6 +14,8 @@ router.get('/activity', AdminController.getActivity);
 
 // Users
 router.get('/users', AdminController.listUsers);
+router.put('/users/:id/approval', AdminController.setUserApproval);
+router.post('/users/:id/impersonate', AdminController.impersonateUser);
 router.put('/users/:id/role', AdminController.updateUserRole);
 router.delete('/users/:id', AdminController.deleteUser);
 
@@ -36,6 +38,11 @@ router.post('/images/cleanup', AdminController.cleanupImages);
 router.post('/docker/prune/containers', AdminController.pruneStoppedContainers);
 router.post('/docker/prune/images', AdminController.pruneUnusedImages);
 router.post('/docker/prune/system', AdminController.pruneSystem);
+
+// Automatic storage management
+router.get('/storage/status', AdminController.getStorageStatus);
+router.get('/storage/history', AdminController.getStorageHistory);
+router.post('/storage/safe-cleanup', AdminController.safeStorageCleanup);
 
 // Settings
 router.get('/settings', AdminController.getSettings);

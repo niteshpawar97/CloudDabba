@@ -20,5 +20,6 @@ export interface SignupPayload {
 
 export interface AuthResponse {
   user: User;
-  token: string;
+  token: string | null;
+  pendingApproval?: boolean;
 }

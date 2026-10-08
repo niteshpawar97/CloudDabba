@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
-import { UserPlus, User, Mail, Lock } from 'lucide-react';
+import { UserPlus, User, Mail, Lock, Clock } from 'lucide-react';
 
 export function Signup() {
   usePageTitle('Create Account');
@@ -13,6 +13,7 @@ export function Signup() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
 
@@ -21,14 +22,32 @@ export function Signup() {
     setError('');
     setLoading(true);
     try {
-      await signup({ name, email, password });
-      navigate('/dashboard');
+      const { pendingApproval } = await signup({ name, email, password });
+      if (pendingApproval) setPending(true);
+      else navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
   };
+
+  if (pending) {
+    return (
+      <div className="text-center">
+        <div className="inline-flex p-3 rounded-2xl bg-amber-500/10 mb-4">
+          <Clock className="h-6 w-6 text-amber-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Waiting for approval</h2>
+        <p className="text-sm text-slate-400 mt-2">
+          Your account has been created. An admin needs to approve it before you can sign in.
+        </p>
+        <Link to="/login" className="inline-block mt-6 text-blue-400 hover:text-blue-300 text-sm font-medium">
+          Back to Sign In
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div>
