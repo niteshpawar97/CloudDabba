@@ -84,7 +84,13 @@ export class DeploymentService {
         } catch {
           // No PAT — clone as public repo
         }
-        const commitHash = await GitHubService.cloneRepo(pat, project.repoUrl, project.branch, buildDir);
+        const commitHash = await GitHubService.cloneRepo(
+          pat,
+          project.repoUrl,
+          project.branch,
+          buildDir,
+          deploymentId,
+        );
 
         await prisma.deployment.update({
           where: { id: deploymentId },
