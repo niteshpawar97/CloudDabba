@@ -1,11 +1,13 @@
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
+import { LogService } from './log.service';
 
 const execFileAsync = promisify(execFile);
+const CLONE_TIMEOUT_MS = 180_000;
 
 // Common directory name patterns
 const FRONTEND_DIRS = ['frontend', 'client', 'web', 'ui', 'app', 'web-app', 'webapp', 'site'];
@@ -128,27 +130,94 @@ export class GitHubService {
     }));
   }
 
-  static async cloneRepo(pat: string, repoUrl: string, branch: string, destPath: string): Promise<string> {
+  // Streams git's own stdout/stderr into the deployment log as it clones
+  // (via spawn, not the previous buffered execFile) so a slow or stuck clone
+  // shows real progress instead of nothing, and so a failure's actual git
+  // error reaches the UI - not just the "Cloning into '...'..." banner git
+  // always prints first, which is all a buffered timeout/kill used to leave
+  // behind. deploymentId is optional so this can still be called without a
+  // deployment context (e.g. tests, one-off tooling).
+  static async cloneRepo(
+    pat: string,
+    repoUrl: string,
+    branch: string,
+    destPath: string,
+    deploymentId?: string,
+  ): Promise<string> {
     await fs.mkdir(destPath, { recursive: true });
 
     const authenticatedUrl = pat ? repoUrl.replace('https://', `https://${pat}@`) : repoUrl;
 
-    try {
-      await execFileAsync('git', [
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('git', [
         'clone',
         '--branch', branch,
         '--depth', '1',
+        '--progress',
         authenticatedUrl,
         destPath,
-      ], { timeout: 120000 });
+      ]);
 
-      logger.info(`Cloned repo to ${destPath}`);
+      let output = '';
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGKILL');
+      }, CLONE_TIMEOUT_MS);
 
-      const { stdout: hash } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: destPath });
-      return hash.trim();
-    } catch (error: any) {
-      throw new AppError(`Failed to clone repository: ${error.message}`, 500);
-    }
+      // The PAT never appears in git's own stdout/stderr (it's only in the
+      // argv we passed), but this redaction is a cheap, defensive backstop
+      // in case a future git version ever echoes the remote URL back.
+      const redact = (text: string) => (pat ? text.split(pat).join('***') : text);
+
+      const onData = (chunk: Buffer) => {
+        const text = redact(chunk.toString());
+        output += text;
+        if (!deploymentId) return;
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed) {
+            LogService.createLog(deploymentId, 'SYSTEM', trimmed).catch(() => {});
+          }
+        }
+      };
+      child.stdout.on('data', onData);
+      child.stderr.on('data', onData);
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(new AppError(`Failed to start git clone: ${err.message}`, 500));
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (timedOut) {
+          reject(
+            new AppError(
+              `Failed to clone repository: timed out after ${CLONE_TIMEOUT_MS / 1000}s. ` +
+                `Last output: ${output.trim().slice(-2000) || '(none)'}`,
+              500,
+            ),
+          );
+          return;
+        }
+        if (code !== 0) {
+          reject(
+            new AppError(
+              `Failed to clone repository: ${output.trim() || `git exited with code ${code}`}`,
+              500,
+            ),
+          );
+          return;
+        }
+        resolve();
+      });
+    });
+
+    logger.info(`Cloned repo to ${destPath}`);
+
+    const { stdout: hash } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: destPath });
+    return hash.trim();
   }
 
   /**
