@@ -8,6 +8,8 @@ export interface Deployment {
   dockerImageId?: string;
   containerId?: string;
   containerPort?: number;
+  rollbackOf?: string | null;
+  canRollback?: boolean;
   startedAt: string;
   finishedAt?: string;
 }

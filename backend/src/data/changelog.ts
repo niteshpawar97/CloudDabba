@@ -10,6 +10,27 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.9.0',
+    date: '2026-10-26',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Docker health monitoring',
+        description: 'The admin dashboard now flags a broken Docker daemon (e.g. containerd shim errors) with the exact fix, and lists unhealthy, crash-looping and unexpectedly stopped containers.',
+      },
+      {
+        type: 'feature',
+        title: 'Notifications',
+        description: 'Get alerts via Slack/Discord webhook, Telegram or email for failed deployments, disk thresholds, unhealthy containers, Docker problems and new signups awaiting approval.',
+      },
+      {
+        type: 'feature',
+        title: 'One-click rollback',
+        description: 'The last two previous versions of every app are kept and can be restored from Deployment History. Rollback images are protected from automatic cleanup except in a disk emergency.',
+      },
+    ],
+  },
+  {
     version: '1.8.0',
     date: '2026-10-26',
     changes: [

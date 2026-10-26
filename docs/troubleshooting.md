@@ -109,3 +109,9 @@ Tunables (env): `STORAGE_AUTO_CLEANUP=false`, `STORAGE_WARN_PCT`, `STORAGE_CLEAN
 ```json
 { "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }
 ```
+
+## Health alerts, notifications and rollback
+
+- **Docker Health** (admin dashboard) shows daemon problems such as `failed to start shim` / containerd mismatches with the fix (`sudo systemctl restart containerd docker`), plus unhealthy, crash-looping and unexpectedly stopped containers.
+- **Notifications** (Admin > Settings): webhook (Slack/Discord/JSON), Telegram, or email for failed deploys, disk thresholds, unhealthy containers, Docker problems and signups awaiting approval. Email needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (optional `SMTP_SECURE=true`) in the server `.env`. Repeated alerts are rate-limited.
+- **Rollback**: the last 2 superseded versions of each single-container app keep their image. Use *Rollback* in the project's Deployment History. Compose projects and deployments made before this feature cannot be rolled back. Rollback images are protected from automatic cleanup; only an emergency (>= 95% disk) cleanup may remove them.

@@ -39,6 +39,14 @@ router.post('/docker/prune/containers', AdminController.pruneStoppedContainers);
 router.post('/docker/prune/images', AdminController.pruneUnusedImages);
 router.post('/docker/prune/system', AdminController.pruneSystem);
 
+// Docker / container health
+router.get('/health', AdminController.getHealth);
+
+// Notifications
+router.get('/notifications', AdminController.getNotificationSettings);
+router.put('/notifications', AdminController.updateNotificationSettings);
+router.post('/notifications/test', AdminController.testNotification);
+
 // Resource overview
 router.get('/resources', AdminController.getResourceOverview);
 
