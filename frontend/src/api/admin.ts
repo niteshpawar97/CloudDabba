@@ -209,3 +209,13 @@ export const getStorageHistory = (limit = 20) =>
   client.get<{ data: StorageCleanupEntry[] }>(`/admin/storage/history?limit=${limit}`).then((r) => r.data.data);
 export const runSafeCleanup = () =>
   client.post<{ message: string }>('/admin/storage/safe-cleanup').then((r) => r.data);
+
+export interface ResourceOverview {
+  host: { cpuCount: number; load1: number; memTotal: number; memUsed: number };
+  projects: Array<{
+    projectId: string; name: string; subdomain: string; owner: string;
+    cpu: number; memUsage: number; memLimit: number; netRxRate: number; netTxRate: number; t: number;
+  }>;
+}
+export const getResourceOverview = () =>
+  client.get<{ data: ResourceOverview }>('/admin/resources').then((r) => r.data.data);

@@ -39,6 +39,9 @@ router.post('/docker/prune/containers', AdminController.pruneStoppedContainers);
 router.post('/docker/prune/images', AdminController.pruneUnusedImages);
 router.post('/docker/prune/system', AdminController.pruneSystem);
 
+// Resource overview
+router.get('/resources', AdminController.getResourceOverview);
+
 // Automatic storage management
 router.get('/storage/status', AdminController.getStorageStatus);
 router.get('/storage/history', AdminController.getStorageHistory);

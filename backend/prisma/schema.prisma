@@ -57,6 +57,9 @@ model Project {
   envVars       Json?         @map("env_vars")
   autoDeploy    Boolean       @default(false) @map("auto_deploy")
   webhookSecret String?       @map("webhook_secret") @db.VarChar(64)
+  // Per-project container resource limits (applied on deploy and live on save)
+  memoryLimitMb Int           @default(512) @map("memory_limit_mb")
+  cpuLimit      Float         @default(0.5) @map("cpu_limit")
   customDomain  String?       @unique @map("custom_domain") @db.VarChar(255)
   domainVerified Boolean      @default(false) @map("domain_verified")
   // Database provisioning

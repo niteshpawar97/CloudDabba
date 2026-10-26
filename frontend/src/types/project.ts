@@ -11,6 +11,8 @@ export interface Project {
   projectType: ProjectType;
   status: ProjectStatus;
   branch: string;
+  memoryLimitMb?: number;
+  cpuLimit?: number;
   envVars?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
