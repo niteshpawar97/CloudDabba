@@ -10,6 +10,22 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.8.0',
+    date: '2026-10-26',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Resource monitoring',
+        description: 'Each project page now shows live CPU, memory and network usage with a 1-hour history, and the admin dashboard lists resource usage across all running projects.',
+      },
+      {
+        type: 'feature',
+        title: 'Configurable resource limits',
+        description: 'Set memory and CPU limits per project. Changes apply to the running container immediately and persist for future deploys.',
+      },
+    ],
+  },
+  {
     version: '1.7.0',
     date: '2026-10-08',
     changes: [

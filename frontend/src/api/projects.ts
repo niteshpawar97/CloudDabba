@@ -44,3 +44,35 @@ export const enableWebhook = (id: string) =>
 
 export const disableWebhook = (id: string) =>
   client.delete(`/projects/${id}/webhook`);
+
+export interface MetricPoint {
+  t: number;
+  cpu: number;
+  memUsage: number;
+  memLimit: number;
+  netRxRate: number;
+  netTxRate: number;
+}
+
+export interface ProjectMetrics {
+  current: MetricPoint | null;
+  history: MetricPoint[];
+  intervalSec: number;
+  limits: {
+    memoryMb: number;
+    cpu: number;
+    maxMemoryMb: number;
+    minMemoryMb: number;
+    minCpu: number;
+    maxCpu: number;
+    editable: boolean;
+  };
+}
+
+export const getProjectMetrics = (id: string) =>
+  client.get<{ data: ProjectMetrics }>(`/projects/${id}/metrics`).then((r) => r.data.data);
+
+export const updateProjectLimits = (id: string, memoryMb: number, cpu: number) =>
+  client.put<{ message: string; data: { memoryMb: number; cpu: number; appliedLive: boolean } }>(
+    `/projects/${id}/limits`, { memoryMb, cpu },
+  ).then((r) => r.data);

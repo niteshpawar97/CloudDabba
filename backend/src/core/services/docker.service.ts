@@ -72,7 +72,8 @@ export class DockerService {
     hostPort: number,
     containerPort: number,
     envVars: Record<string, string> = {},
-    labels: Record<string, string> = {}
+    labels: Record<string, string> = {},
+    limits: { memoryMb?: number; cpu?: number } = {}
   ) {
     const envArray = Object.entries(envVars).map(([k, v]) => `${k}=${v}`);
 
@@ -85,8 +86,8 @@ export class DockerService {
         PortBindings: {
           [`${containerPort}/tcp`]: [{ HostPort: String(hostPort) }],
         },
-        Memory: 512 * 1024 * 1024, // 512MB
-        NanoCpus: 500000000,        // 0.5 CPU
+        Memory: (limits.memoryMb || 512) * 1024 * 1024,
+        NanoCpus: Math.round((limits.cpu || 0.5) * 1e9),
         RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 0 },
         // Cap container logs so a chatty app cannot fill the disk
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },

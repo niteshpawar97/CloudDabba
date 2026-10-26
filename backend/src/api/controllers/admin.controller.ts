@@ -8,6 +8,7 @@ import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import { ImageCleanupService } from '../../core/services/image-cleanup.service';
+import { ResourceMonitorService } from '../../core/services/resource-monitor.service';
 import { StorageManagerService } from '../../core/services/storage-manager.service';
 import { DeployLockService } from '../../core/services/deploy-lock.service';
 import logger from '../../shared/utils/logger';
@@ -620,6 +621,14 @@ export class AdminController {
         { containersRemoved, imagesRemoved, networksRemoved, reclaimed },
         `Pruned ${containersRemoved} containers, ${imagesRemoved} images, ${networksRemoved} networks (${formatBytes(reclaimed)} reclaimed)`,
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getResourceOverview(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await ResourceMonitorService.getOverview());
     } catch (error) {
       next(error);
     }

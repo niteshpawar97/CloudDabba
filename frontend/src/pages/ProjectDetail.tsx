@@ -11,6 +11,7 @@ import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { ResourcesCard } from '../components/project/ResourcesCard';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
 import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database, Send } from 'lucide-react';
@@ -530,6 +531,8 @@ export function ProjectDetail() {
           </div>
         )}
       </Card>
+
+      <ResourcesCard projectId={projectId!} isRunning={project?.status === 'ACTIVE'} />
 
       {/* Database Provisioning */}
       <Card>

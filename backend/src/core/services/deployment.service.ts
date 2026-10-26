@@ -267,7 +267,8 @@ export class DeploymentService {
         {
           'clouddabba.project': projectId,
           'clouddabba.deployment': deploymentId,
-        }
+        },
+        { memoryMb: (project as any).memoryLimitMb, cpu: (project as any).cpuLimit },
       );
 
       containerId = container.id;

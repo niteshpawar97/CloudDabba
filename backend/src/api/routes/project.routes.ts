@@ -3,6 +3,7 @@ import { ProjectController } from '../controllers/project.controller';
 import { DeploymentController } from '../controllers/deployment.controller';
 import { WebhookController } from '../controllers/webhook.controller';
 import { DomainController } from '../controllers/domain.controller';
+import { ResourceController } from '../controllers/resource.controller';
 import { DatabaseController } from '../controllers/database.controller';
 import { createProjectValidator, updateProjectValidator, envVarsValidator } from '../validators/project.validator';
 import { validate } from '../../core/middleware/validation.middleware';
@@ -27,6 +28,10 @@ router.get('/check-subdomain/:subdomain', authenticate, ProjectController.checkS
 // Deploy & Deployments under project
 router.post('/:id/deploy', authenticate, deployLimiter, DeploymentController.triggerDeploy);
 router.get('/:id/deployments', authenticate, DeploymentController.listByProject);
+
+// Resource monitoring + limits
+router.get('/:id/metrics', authenticate, ResourceController.getMetrics);
+router.put('/:id/limits', authenticate, ResourceController.updateLimits);
 
 // Webhook (auto-deploy)
 router.get('/:id/webhook', authenticate, WebhookController.getWebhookStatus);
