@@ -219,3 +219,41 @@ export interface ResourceOverview {
 }
 export const getResourceOverview = () =>
   client.get<{ data: ResourceOverview }>('/admin/resources').then((r) => r.data.data);
+
+// ---- Docker / container health ----
+export interface HealthStatus {
+  daemon: { ok: boolean; error?: string; hint?: string; detectedAt?: number };
+  issues: Array<{
+    id: string; name: string; kind: 'unhealthy' | 'restarting' | 'down'; status: string;
+    managed: boolean; projectId?: string; projectName?: string; since: number; confirmed: boolean;
+  }>;
+  containers: { total: number; running: number };
+  checkedAt: number | null;
+}
+export const getHealth = () =>
+  client.get<{ data: HealthStatus }>('/admin/health').then((r) => r.data.data);
+
+// ---- Notifications ----
+export type NotifyEvent = 'deployFailed' | 'diskAlert' | 'containerUnhealthy' | 'dockerDaemon' | 'signupPending';
+export interface NotificationSettings {
+  webhookConfigured: boolean;
+  telegramConfigured: boolean;
+  telegramChatId: string | null;
+  email: string | null;
+  smtpConfigured: boolean;
+  events: Record<NotifyEvent, boolean>;
+  eventLabels: Record<NotifyEvent, string>;
+}
+export interface NotificationUpdate {
+  webhookUrl?: string;
+  telegramToken?: string;
+  telegramChatId?: string;
+  email?: string;
+  events?: Partial<Record<NotifyEvent, boolean>>;
+}
+export const getNotificationSettings = () =>
+  client.get<{ data: NotificationSettings }>('/admin/notifications').then((r) => r.data.data);
+export const updateNotificationSettings = (data: NotificationUpdate) =>
+  client.put<{ data: NotificationSettings }>('/admin/notifications', data).then((r) => r.data.data);
+export const testNotification = () =>
+  client.post<{ message: string }>('/admin/notifications/test').then((r) => r.data);

@@ -4,6 +4,7 @@ import prisma from '../../database/connection';
 import { config } from '../../shared/config/app.config';
 import { AppError } from '../types';
 import { encrypt, decrypt } from './encryption.service';
+import { NotificationService } from './notification.service';
 
 export class AuthService {
   static async signup(name: string, email: string, password: string) {
@@ -31,6 +32,7 @@ export class AuthService {
     });
 
     if (!isFirstUser) {
+      NotificationService.notify('signupPending', 'New signup awaiting approval', `${name} <${email}> created an account and is waiting for admin approval (Admin > Users).`);
       return { user, token: null, pendingApproval: true };
     }
     const token = this.generateToken(user.id, user.email);

@@ -13,6 +13,9 @@ import { broadcastStatus } from '../../infrastructure/websocket/log-stream';
 import { AppError } from '../types';
 import logger from '../../shared/utils/logger';
 import { DeployLockService } from './deploy-lock.service';
+import { RollbackService } from './rollback.service';
+import { HealthMonitorService } from './health-monitor.service';
+import { NotificationService } from './notification.service';
 
 export class DeploymentService {
   static async triggerDeploy(projectId: string, userId: string) {
@@ -231,32 +234,7 @@ export class DeploymentService {
       const containerPort = (isStatic || isFullstack) ? 80 : hostPort;
       const containerName = `cd-${project.subdomain}-${deploymentId.slice(0, 8)}`;
 
-      // Parse env vars — force PORT so app listens on our port (skip for static/fullstack which use nginx)
-      const envVars: Record<string, string> = project.envVars ? { ...(project.envVars as Record<string, string>) } : {};
-      if (!isStatic && !isFullstack) {
-        envVars['PORT'] = String(hostPort);
-        delete envVars['port'];
-      }
-
-      // Inject provisioned database URLs
-      const proj = project as any;
-      if (proj.dbEnabled && proj.dbPasswordEnc && proj.dbName && proj.dbUser) {
-        const { decrypt } = await import('./encryption.service');
-        const { DatabaseProvisionService } = await import('./database-provision.service');
-        envVars['DATABASE_URL'] = DatabaseProvisionService.buildDatabaseUrl(proj.dbUser, decrypt(proj.dbPasswordEnc), proj.dbName);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Injected DATABASE_URL (db: ${proj.dbName})`);
-      }
-      if (proj.redisEnabled && proj.redisDbNumber != null) {
-        const { DatabaseProvisionService } = await import('./database-provision.service');
-        envVars['REDIS_URL'] = DatabaseProvisionService.buildRedisUrl(proj.redisDbNumber);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Injected REDIS_URL (db: ${proj.redisDbNumber})`);
-      }
-      if (proj.mariadbEnabled && proj.mariadbPasswordEnc && proj.mariadbName && proj.mariadbUser) {
-        const { decrypt: dec } = await import('./encryption.service');
-        const { DatabaseProvisionService: DbProv } = await import('./database-provision.service');
-        envVars['MYSQL_URL'] = DbProv.buildMariadbUrl(proj.mariadbUser, dec(proj.mariadbPasswordEnc), proj.mariadbName);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Injected MYSQL_URL (db: ${proj.mariadbName})`);
-      }
+      const envVars = await this.buildRuntimeEnv(project, hostPort, isStatic || isFullstack, deploymentId);
 
       const container = await DockerService.createAndStartContainer(
         imageTag,
@@ -274,7 +252,7 @@ export class DeploymentService {
       containerId = container.id;
       await prisma.deployment.update({
         where: { id: deploymentId },
-        data: { containerId, containerPort: hostPort },
+        data: { containerId, containerPort: hostPort, internalPort: containerPort },
       });
       await LogService.createLog(deploymentId, 'SYSTEM', `Container started on port ${hostPort}`);
 
@@ -291,28 +269,16 @@ export class DeploymentService {
         if (prev.containerId) {
           await DockerService.stopContainer(prev.containerId);
         }
-        if (prev.dockerImageId) {
-          await DockerService.removeImage(prev.dockerImageId).catch(() => {});
-        }
         await prisma.deployment.update({
           where: { id: prev.id },
           data: { status: 'STOPPED', finishedAt: new Date() },
         });
       }
+      // Previous images are kept for one-click rollback; only older ones are pruned.
+      await RollbackService.pruneOldImages(projectId).catch(() => {});
 
       // Step 6: Configure NGINX
-      const customDomain = (project as any).customDomain;
-      const domainVerified = (project as any).domainVerified;
-
-      if (customDomain && domainVerified) {
-        // Custom domain active → subdomain redirects to custom domain
-        await NginxService.generateRedirectConfig(project.subdomain, customDomain);
-        await NginxService.generateCustomDomainConfig(customDomain, hostPort);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Custom domain: ${customDomain} | ${project.subdomain}.${process.env.BASE_DOMAIN} → redirects`);
-      } else {
-        await NginxService.generateConfig(project.subdomain, hostPort);
-        await LogService.createLog(deploymentId, 'SYSTEM', `Subdomain configured: ${project.subdomain}.${process.env.BASE_DOMAIN}`);
-      }
+      await this.applyNginx(project, hostPort, deploymentId);
 
       // Step 7: Mark as live
       await this.updateStatus(deploymentId, 'LIVE');
@@ -326,6 +292,7 @@ export class DeploymentService {
       });
 
       await LogService.createLog(deploymentId, 'SYSTEM', 'Deployment successful! App is live.');
+      HealthMonitorService.reportDockerOk();
 
     } catch (error: any) {
       logger.error(`Deployment ${deploymentId} failed:`, error);
@@ -344,6 +311,8 @@ export class DeploymentService {
         where: { id: projectId },
         data: { status: 'FAILED' },
       });
+
+      this.notifyFailure(projectId, deploymentId, error);
 
       // Cleanup on failure
       if (containerId) {
@@ -867,6 +836,144 @@ export class DeploymentService {
     logger.info(`Reorganized fullstack: ${backendPath} → /backend, ${frontendPath} → /frontend`);
   }
 
+  /**
+   * Environment for a running container: project env vars, forced PORT (apps that
+   * listen on our allocated port), and provisioned database URLs.
+   * Shared by normal deploys and rollbacks so both behave identically.
+   */
+  private static async buildRuntimeEnv(project: any, hostPort: number, servedByNginx: boolean, deploymentId: string) {
+    const envVars: Record<string, string> = project.envVars ? { ...(project.envVars as Record<string, string>) } : {};
+    if (!servedByNginx) {
+      envVars['PORT'] = String(hostPort);
+      delete envVars['port'];
+    }
+
+    if (project.dbEnabled && project.dbPasswordEnc && project.dbName && project.dbUser) {
+      const { decrypt } = await import('./encryption.service');
+      const { DatabaseProvisionService } = await import('./database-provision.service');
+      envVars['DATABASE_URL'] = DatabaseProvisionService.buildDatabaseUrl(project.dbUser, decrypt(project.dbPasswordEnc), project.dbName);
+      await LogService.createLog(deploymentId, 'SYSTEM', `Injected DATABASE_URL (db: ${project.dbName})`);
+    }
+    if (project.redisEnabled && project.redisDbNumber != null) {
+      const { DatabaseProvisionService } = await import('./database-provision.service');
+      envVars['REDIS_URL'] = DatabaseProvisionService.buildRedisUrl(project.redisDbNumber);
+      await LogService.createLog(deploymentId, 'SYSTEM', `Injected REDIS_URL (db: ${project.redisDbNumber})`);
+    }
+    if (project.mariadbEnabled && project.mariadbPasswordEnc && project.mariadbName && project.mariadbUser) {
+      const { decrypt } = await import('./encryption.service');
+      const { DatabaseProvisionService } = await import('./database-provision.service');
+      envVars['MYSQL_URL'] = DatabaseProvisionService.buildMariadbUrl(project.mariadbUser, decrypt(project.mariadbPasswordEnc), project.mariadbName);
+      await LogService.createLog(deploymentId, 'SYSTEM', `Injected MYSQL_URL (db: ${project.mariadbName})`);
+    }
+    return envVars;
+  }
+
+  private static async applyNginx(project: any, hostPort: number, deploymentId: string) {
+    if (project.customDomain && project.domainVerified) {
+      // Custom domain active -> subdomain redirects to custom domain
+      await NginxService.generateRedirectConfig(project.subdomain, project.customDomain);
+      await NginxService.generateCustomDomainConfig(project.customDomain, hostPort);
+      await LogService.createLog(deploymentId, 'SYSTEM', `Custom domain: ${project.customDomain} | ${project.subdomain}.${process.env.BASE_DOMAIN} → redirects`);
+    } else {
+      await NginxService.generateConfig(project.subdomain, hostPort);
+      await LogService.createLog(deploymentId, 'SYSTEM', `Subdomain configured: ${project.subdomain}.${process.env.BASE_DOMAIN}`);
+    }
+  }
+
+  /** Flags Docker-host faults for the health monitor and alerts the admin about the failure. */
+  private static notifyFailure(projectId: string, deploymentId: string, error: any) {
+    const message = String(error?.message || error);
+    const daemonIssue = HealthMonitorService.reportDockerError(message);
+    prisma.project.findUnique({ where: { id: projectId }, select: { name: true } })
+      .then((p) => {
+        NotificationService.notify(
+          'deployFailed',
+          `Deployment failed: ${p?.name || projectId}`,
+          `${message.slice(0, 500)}${daemonIssue ? '\n\nThis looks like a Docker host problem, not an app problem. Restart containerd/docker on the server.' : ''}`,
+          { dedupeKey: deploymentId, cooldownMs: 60_000 },
+        );
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Roll a project back to a retained earlier image. Starts the old image as a NEW
+   * container first and only then stops the current one, so a failed rollback leaves
+   * the running version untouched.
+   */
+  static async rollback(deploymentId: string, userId: string) {
+    const target = await this.getDeployment(deploymentId, userId);
+    const project: any = target.project;
+
+    if (target.status === 'LIVE') throw new AppError('This deployment is already live', 400);
+    if (!target.dockerImageId || target.internalPort == null) {
+      throw new AppError('This deployment cannot be rolled back (its image was not retained)', 400);
+    }
+    if (target.containerId?.startsWith('compose:')) throw new AppError('Docker Compose deployments cannot be rolled back', 400);
+    if (!(await RollbackService.imageExists(target.dockerImageId))) {
+      throw new AppError('The image for this deployment has been cleaned up and is no longer available', 410);
+    }
+
+    const created = await prisma.deployment.create({
+      data: {
+        projectId: project.id,
+        status: 'DEPLOYING',
+        dockerImageId: target.dockerImageId,
+        commitHash: target.commitHash,
+        internalPort: target.internalPort,
+        rollbackOf: target.id,
+      },
+    });
+    await DeployLockService.acquire(created.id);
+    let containerId: string | undefined;
+    try {
+      await LogService.createLog(created.id, 'SYSTEM', `Rolling back to deployment ${target.id.slice(0, 8)}${target.commitHash ? ` (${target.commitHash.slice(0, 7)})` : ''}`);
+      const hostPort = await allocatePort();
+      const servedByNginx = target.internalPort === 80;
+      const envVars = await this.buildRuntimeEnv(project, hostPort, servedByNginx, created.id);
+      const containerName = `cd-${project.subdomain}-${created.id.slice(0, 8)}`;
+
+      const container = await DockerService.createAndStartContainer(
+        target.dockerImageId,
+        containerName,
+        hostPort,
+        servedByNginx ? 80 : hostPort,
+        envVars,
+        { 'clouddabba.project': project.id, 'clouddabba.deployment': created.id },
+        { memoryMb: project.memoryLimitMb, cpu: project.cpuLimit },
+      );
+      containerId = container.id;
+      await prisma.deployment.update({ where: { id: created.id }, data: { containerId, containerPort: hostPort } });
+
+      const previous = await prisma.deployment.findMany({
+        where: { projectId: project.id, status: 'LIVE', id: { not: created.id } },
+      });
+      for (const prev of previous) {
+        if (prev.containerId) await DockerService.stopContainer(prev.containerId);
+        await prisma.deployment.update({ where: { id: prev.id }, data: { status: 'STOPPED', finishedAt: new Date() } });
+      }
+
+      await this.applyNginx(project, hostPort, created.id);
+      await this.updateStatus(created.id, 'LIVE');
+      await prisma.deployment.update({ where: { id: created.id }, data: { finishedAt: new Date() } });
+      await prisma.project.update({ where: { id: project.id }, data: { status: 'ACTIVE' } });
+      await LogService.createLog(created.id, 'SYSTEM', 'Rollback successful! App is live.');
+      HealthMonitorService.reportDockerOk();
+      await RollbackService.pruneOldImages(project.id).catch(() => {});
+      return prisma.deployment.findUnique({ where: { id: created.id } });
+    } catch (error: any) {
+      logger.error(`Rollback ${created.id} failed:`, error);
+      await LogService.createLog(created.id, 'SYSTEM', `Rollback failed: ${error.message}`);
+      await this.updateStatus(created.id, 'FAILED');
+      await prisma.deployment.update({ where: { id: created.id }, data: { finishedAt: new Date() } });
+      if (containerId) await DockerService.stopContainer(containerId).catch(() => {});
+      this.notifyFailure(project.id, created.id, error);
+      throw new AppError(`Rollback failed: ${error.message}`, 500);
+    } finally {
+      DeployLockService.release(created.id);
+    }
+  }
+
   private static async updateStatus(deploymentId: string, status: string) {
     await prisma.deployment.update({
       where: { id: deploymentId },
@@ -890,11 +997,12 @@ export class DeploymentService {
     if (!project) throw new AppError('Project not found', 404);
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
 
-    return prisma.deployment.findMany({
+    const deployments = await prisma.deployment.findMany({
       where: { projectId },
       orderBy: { startedAt: 'desc' },
       take: 20,
     });
+    return RollbackService.annotate(projectId, deployments);
   }
 
   static async stopDeployment(deploymentId: string, userId: string) {

@@ -3,6 +3,8 @@ import docker from '../../infrastructure/docker/docker-client';
 import prisma from '../../database/connection';
 import logger from '../../shared/utils/logger';
 import { DeployLockService } from './deploy-lock.service';
+import { RollbackService } from './rollback.service';
+import { NotificationService } from './notification.service';
 
 /**
  * Automatic Docker storage management.
@@ -98,8 +100,9 @@ export class StorageManagerService {
   }
 
   /** Image IDs that must never be removed. */
-  private static async protectedImageIds(): Promise<Set<string>> {
-    const ids = new Set<string>();
+  private static async protectedImageIds(keepRollback: boolean): Promise<Set<string>> {
+    // Retained rollback images are protected; if they cannot be determined, abort rather than guess.
+    const ids = keepRollback ? await RollbackService.protectedImageIds() : new Set<string>();
     const containers = await docker.listContainers({ all: true });
     for (const c of containers as any[]) if (c.ImageID) ids.add(c.ImageID);
     const live = await prisma.deployment.findMany({
@@ -118,8 +121,8 @@ export class StorageManagerService {
   }
 
   /** Unused, non-protected images older than graceMs. */
-  private static async candidateImages(opts: { graceMs: number; onlyOurs: boolean }) {
-    const [images, protectedIds] = await Promise.all([docker.listImages(), this.protectedImageIds()]);
+  private static async candidateImages(opts: { graceMs: number; onlyOurs: boolean; keepRollback?: boolean }) {
+    const [images, protectedIds] = await Promise.all([docker.listImages(), this.protectedImageIds(opts.keepRollback !== false)]);
     const cutoff = Date.now() / 1000 - opts.graceMs / 1000;
     return (images as any[]).filter((img) => {
       if (protectedIds.has(img.Id)) return false;
@@ -295,6 +298,8 @@ export class StorageManagerService {
         const cands = await this.candidateImages({
           graceMs: aggressive ? GRACE_AGGRESSIVE_MS : GRACE_NORMAL_MS,
           onlyOurs: !aggressive,
+          // Only a true emergency may sacrifice rollback images; manual Safe Cleanup never does.
+          keepRollback: level !== 'EMERGENCY',
         });
         const res = await this.removeImages(cands);
         bytes += res.bytes;
@@ -348,6 +353,7 @@ export class StorageManagerService {
       if (Date.now() - this.lastWarnLog > WARNING_LOG_EVERY_MS) {
         this.lastWarnLog = Date.now();
         logger.warn(`Disk usage at ${disk.usedPercent}% (warning threshold ${storageConfig.warnPct}%)`);
+        NotificationService.notify('diskAlert', `Disk usage ${disk.usedPercent}%`, `Disk is above the ${storageConfig.warnPct}% warning threshold. Automatic cleanup starts at ${storageConfig.cleanupPct}%.`, { dedupeKey: 'warning', cooldownMs: 12 * 60 * 60 * 1000 });
         await this.record('AUTO', {
           status: 'SUCCESS', level: 'WARNING', usageBefore: disk.usedPercent, usageAfter: null,
           bytesReclaimed: 0, imagesRemoved: 0,
@@ -358,6 +364,7 @@ export class StorageManagerService {
     }
 
     logger.warn(`Disk usage at ${disk.usedPercent}% - running ${level} cleanup`);
+    NotificationService.notify('diskAlert', `Disk usage ${disk.usedPercent}% - ${level.toLowerCase()} cleanup started`, `Disk crossed the ${level === 'EMERGENCY' ? storageConfig.emergencyPct : storageConfig.cleanupPct}% threshold; automatic ${level.toLowerCase()} cleanup is running.`, { dedupeKey: level, cooldownMs: 3 * 60 * 60 * 1000 });
     const r = await this.runCleanup(level === 'EMERGENCY' ? 'EMERGENCY' : 'CLEANUP', 'AUTO');
     // Normal cleanup wasn't enough and we are in the emergency band -> escalate.
     if (r.status === 'SUCCESS' && level === 'CLEANUP' && (r.usageAfter ?? 0) >= storageConfig.emergencyPct) {

@@ -102,6 +102,9 @@ model Deployment {
   dockerImageId String?          @map("docker_image_id") @db.VarChar(100)
   containerId   String?          @map("container_id") @db.VarChar(100)
   containerPort Int?             @map("container_port")
+  // Port the app listens on INSIDE the container (80 for nginx-served builds); needed to rollback
+  internalPort  Int?             @map("internal_port")
+  rollbackOf    String?          @map("rollback_of")
   startedAt     DateTime         @default(now()) @map("started_at")
   finishedAt    DateTime?        @map("finished_at")
   project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -143,6 +146,12 @@ model PlatformSettings {
   sslEmail       String?   @map("ssl_email") @db.VarChar(255)
   defaultBranch  String    @default("main") @map("default_branch") @db.VarChar(100)
   cloudflareApiTokenEnc String? @map("cloudflare_api_token_enc") @db.Text
+  // Notifications (secrets encrypted at rest)
+  notifyWebhookUrlEnc   String? @map("notify_webhook_url_enc") @db.Text
+  notifyTelegramTokenEnc String? @map("notify_telegram_token_enc") @db.Text
+  notifyTelegramChatId  String? @map("notify_telegram_chat_id") @db.VarChar(64)
+  notifyEmail           String? @map("notify_email") @db.VarChar(255)
+  notifyEvents          Json?   @map("notify_events")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 

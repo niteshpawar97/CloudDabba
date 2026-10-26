@@ -1,6 +1,7 @@
 import docker from '../../infrastructure/docker/docker-client';
 import logger from '../../shared/utils/logger';
 import { DeployLockService } from './deploy-lock.service';
+import { RollbackService } from './rollback.service';
 
 // Never touch images built more recently than this — a deploy in flight
 // (image built, container not started yet) must not get swept up.
@@ -25,6 +26,8 @@ export class ImageCleanupService {
     const images = await docker.listImages();
     const containers = await docker.listContainers({ all: true });
     const usedImageIds = new Set(containers.map((c: any) => c.ImageID));
+    // Images kept for one-click rollback; if they cannot be determined, do nothing.
+    for (const id of await RollbackService.protectedImageIds()) usedImageIds.add(id);
     const cutoffSeconds = Date.now() / 1000 - graceMs / 1000;
 
     let cleaned = 0;

@@ -35,3 +35,6 @@ export interface ExecResult {
 }
 export const execInContainer = (id: string, command: string) =>
   client.post<{ data: ExecResult }>(`/deployments/${id}/exec`, { command }).then((r) => r.data.data);
+
+export const rollbackDeployment = (id: string) =>
+  client.post<{ data: Deployment }>(`/deployments/${id}/rollback`).then((r) => r.data.data);

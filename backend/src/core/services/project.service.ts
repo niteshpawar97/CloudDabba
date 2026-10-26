@@ -1,6 +1,7 @@
 import prisma from '../../database/connection';
 import { AppError } from '../types';
 import { DockerService } from './docker.service';
+import { RollbackService } from './rollback.service';
 
 // Reserved subdomains that can't be used
 const RESERVED_SUBDOMAINS = ['www', 'api', 'app', 'admin', 'mail', 'ftp', 'ns1', 'ns2', 'panel', 'dashboard', 'login', 'signup', 'auth'];
@@ -124,7 +125,7 @@ export class ProjectService {
 
     if (!project) throw new AppError('Project not found', 404);
     if (project.userId !== userId) throw new AppError('Unauthorized', 403);
-    return project;
+    return { ...project, deployments: await RollbackService.annotate(projectId, project.deployments) };
   }
 
   static async update(projectId: string, userId: string, data: {
