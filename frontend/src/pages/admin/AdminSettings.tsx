@@ -7,6 +7,7 @@ import { Settings, Globe, Server, Shield, Terminal, Save, Mail, GitBranch, Users
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { PlatformDomainCard } from '../../components/admin/PlatformDomainCard';
 import { CloudFirewallGuideCard } from '../../components/admin/CloudFirewallGuideCard';
+import { PlatformBackupsCard } from '../../components/admin/PlatformBackupsCard';
 import { NotificationsCard } from '../../components/admin/NotificationsCard';
 import { DockerMaintenanceCard } from '../../components/admin/DockerMaintenanceCard';
 
@@ -224,6 +225,7 @@ export function AdminSettings() {
         <CloudFirewallGuideCard />
 
         {/* Docker disk maintenance — prune stopped containers / unused images / system */}
+        <PlatformBackupsCard />
         <NotificationsCard />
         <DockerMaintenanceCard />
 

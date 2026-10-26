@@ -4,6 +4,8 @@ import docker from '../../infrastructure/docker/docker-client';
 import { AuthRequest, AppError } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import { AuthService } from '../../core/services/auth.service';
+import { AuditService } from '../../core/services/audit.service';
+import { PasswordResetService } from '../../core/services/password-reset.service';
 import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
@@ -142,6 +144,28 @@ export class AdminController {
       }));
 
       sendSuccess(res, { users: formatted, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // One-time password reset link an admin can hand to a user (works without SMTP)
+  static async createResetLink(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await PasswordResetService.adminLink(req.params.id as string), 'Reset link created');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async listAudit(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await AuditService.list({
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 50,
+        action: (req.query.action as string) || undefined,
+        actor: (req.query.actor as string) || undefined,
+      }));
     } catch (error) {
       next(error);
     }

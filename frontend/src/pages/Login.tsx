@@ -78,6 +78,9 @@ export function Login() {
       </form>
 
       <div className="mt-6 text-center space-y-3">
+        <p className="text-sm">
+          <Link to="/forgot-password" className="text-slate-400 hover:text-slate-200">Forgot password?</Link>
+        </p>
         <p className="text-sm text-slate-400">
           Don't have an account?{' '}
           <Link to="/signup" className="text-blue-400 hover:text-blue-300 font-medium">

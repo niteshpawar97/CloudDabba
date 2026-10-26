@@ -11,6 +11,15 @@ export const loginValidator = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+export const forgotPasswordValidator = [
+  body('email').trim().isEmail().withMessage('Valid email is required').normalizeEmail(),
+];
+
+export const resetPasswordValidator = [
+  body('token').isString().notEmpty().withMessage('Reset token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+];
+
 export const githubPatValidator = [
   body('pat').trim().notEmpty().withMessage('GitHub PAT is required'),
 ];

@@ -76,3 +76,28 @@ export const updateProjectLimits = (id: string, memoryMb: number, cpu: number) =
   client.put<{ message: string; data: { memoryMb: number; cpu: number; appliedLive: boolean } }>(
     `/projects/${id}/limits`, { memoryMb, cpu },
   ).then((r) => r.data);
+
+// ---- Database backups ----
+export interface BackupEntry {
+  id: string;
+  scope: 'PROJECT' | 'PLATFORM';
+  engine: 'POSTGRES' | 'MARIADB';
+  trigger: 'AUTO' | 'MANUAL' | 'PRE_RESTORE';
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED';
+  sizeBytes: number;
+  error: string | null;
+  createdAt: string;
+}
+export interface BackupList {
+  backups: BackupEntry[];
+  restoring: boolean;
+  lastRestore: { backupId: string; ok: boolean; error?: string; at: number } | null;
+}
+export const getBackups = (projectId: string) =>
+  client.get<{ data: BackupList }>(`/projects/${projectId}/backups`).then((r) => r.data.data);
+export const createBackup = (projectId: string, engine: 'POSTGRES' | 'MARIADB') =>
+  client.post(`/projects/${projectId}/backups`, { engine });
+export const restoreBackup = (projectId: string, backupId: string) =>
+  client.post<{ message: string }>(`/projects/${projectId}/backups/${backupId}/restore`).then((r) => r.data);
+export const deleteBackup = (projectId: string, backupId: string) =>
+  client.delete(`/projects/${projectId}/backups/${backupId}`);
