@@ -115,3 +115,17 @@ Tunables (env): `STORAGE_AUTO_CLEANUP=false`, `STORAGE_WARN_PCT`, `STORAGE_CLEAN
 - **Docker Health** (admin dashboard) shows daemon problems such as `failed to start shim` / containerd mismatches with the fix (`sudo systemctl restart containerd docker`), plus unhealthy, crash-looping and unexpectedly stopped containers.
 - **Notifications** (Admin > Settings): webhook (Slack/Discord/JSON), Telegram, or email for failed deploys, disk thresholds, unhealthy containers, Docker problems and signups awaiting approval. Email needs `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (optional `SMTP_SECURE=true`) in the server `.env`. Repeated alerts are rate-limited.
 - **Rollback**: the last 2 superseded versions of each single-container app keep their image. Use *Rollback* in the project's Deployment History. Compose projects and deployments made before this feature cannot be rolled back. Rollback images are protected from automatic cleanup; only an emergency (>= 95% disk) cleanup may remove them.
+
+## Backups, audit log and password reset
+
+**Database backups** (project page > Database backups, and Admin > Settings for the platform DB)
+- Daily automatic backup of every project PostgreSQL / MariaDB database and of CloudDabba's own database; last 7 kept (manual: 10, safety backups before a restore: 3). Redis is not backed up.
+- Files are gzipped SQL in `backups/` next to the app (override with `BACKUP_DIR`), never touched by Docker cleanup. Back this directory up off-server too: a backup on the same disk does not survive a disk failure.
+- Needs dump tools on the server: `pg_dump`/`psql` (install `postgresql-client`; if missing, CloudDabba falls back to `docker exec` into the Postgres container, name set by `PG_DOCKER_CONTAINER`, default `clouddabba-db`) and `mariadb-dump`/`mysqldump` for MariaDB. `PG_DUMP_PATH` / `PSQL_PATH` override the binaries.
+- Restore replaces the database contents; a safety backup of the current data is taken first and the restore is refused if that backup fails. PostgreSQL restores run in a single transaction (all or nothing).
+- Restore the platform DB manually: `gunzip -c backup.sql.gz | psql "$DATABASE_URL"`.
+- Other env: `BACKUP_AUTO=false` disables the schedule, `BACKUP_RETENTION=7`.
+
+**Audit log** (Admin > Audit Log): who did what and from which IP - logins (including failures), signups, approvals, role changes, impersonation, deletes, deployments/rollbacks, resource limits, database and backup actions, settings changes, password resets. Entries are kept 180 days. Actions taken while an admin is impersonating a user show "via admin ...".
+
+**Password reset**: "Forgot password?" on the login page emails a single-use link (valid 1 hour); needs SMTP (see Notifications). Without SMTP, an admin can create a link from Admin > Users (key icon) and send it to the user. Resetting a password signs out all existing sessions. Set `APP_URL` (e.g. `https://panel.example.com`) if the link should not use the configured base domain.

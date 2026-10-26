@@ -11,6 +11,7 @@ import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { BackupsCard } from '../components/project/BackupsCard';
 import { ResourcesCard } from '../components/project/ResourcesCard';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
@@ -531,6 +532,8 @@ export function ProjectDetail() {
           </div>
         )}
       </Card>
+
+      <BackupsCard projectId={projectId!} postgres={!!dbStatus?.postgres?.enabled} mariadb={!!dbStatus?.mariadb?.enabled} />
 
       <ResourcesCard projectId={projectId!} isRunning={project?.status === 'ACTIVE'} />
 

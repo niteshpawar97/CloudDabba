@@ -10,6 +10,27 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '1.10.0',
+    date: '2026-10-26',
+    changes: [
+      {
+        type: 'feature',
+        title: 'Database backups',
+        description: 'Automatic daily backups of every project PostgreSQL/MariaDB database and of the platform database, with manual backup, download and one-click restore (a safety backup is taken first).',
+      },
+      {
+        type: 'feature',
+        title: 'Audit log',
+        description: 'Admin > Audit Log records who did what and from where: logins, impersonation, approvals, deletes, deployments, settings and backup actions.',
+      },
+      {
+        type: 'feature',
+        title: 'Password reset',
+        description: 'Users can reset a forgotten password by email, and admins can generate a one-time reset link from the Users page. Resetting signs out all existing sessions.',
+      },
+    ],
+  },
+  {
     version: '1.9.0',
     date: '2026-10-26',
     changes: [

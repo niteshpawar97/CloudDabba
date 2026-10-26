@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getUsers, updateUserRole, deleteUser, setUserApproval, impersonateUser } from '../../api/admin';
+import { getUsers, updateUserRole, deleteUser, setUserApproval, impersonateUser, createResetLink } from '../../api/admin';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
-import { Search, Trash2, Shield, User, UserCheck, UserX, LogIn } from 'lucide-react';
+import { Search, Trash2, Shield, User, UserCheck, UserX, LogIn, KeyRound } from 'lucide-react';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
 export function AdminUsers() {
@@ -51,6 +51,17 @@ export function AdminUsers() {
     }
   };
 
+  const [resetInfo, setResetInfo] = useState<{ email: string; link: string; minutes: number } | null>(null);
+
+  const handleResetLink = async (id: string) => {
+    try {
+      const r = await createResetLink(id);
+      setResetInfo({ email: r.email, link: r.link, minutes: r.expiresInMinutes });
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Failed to create reset link');
+    }
+  };
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete user "${name}"? This will delete all their projects and deployments.`)) return;
     await deleteUser(id);
@@ -63,6 +74,19 @@ export function AdminUsers() {
         <h1 className="text-2xl font-bold text-white">Users</h1>
         <span className="text-sm text-slate-400">{data.pagination.total || 0} total</span>
       </div>
+
+      {resetInfo && (
+        <div className="mb-6 rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+          <p className="text-sm text-white">Password reset link for <b>{resetInfo.email}</b> (single use, valid {resetInfo.minutes} min):</p>
+          <div className="mt-2 flex gap-2">
+            <input readOnly value={resetInfo.link} onFocus={(e) => e.target.select()}
+              className="flex-1 rounded-lg bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-200 font-mono" />
+            <button onClick={() => navigator.clipboard.writeText(resetInfo.link)} className="px-3 rounded-lg bg-white/10 text-xs text-white">Copy</button>
+            <button onClick={() => setResetInfo(null)} className="px-3 rounded-lg bg-white/5 text-xs text-slate-300">Close</button>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">Send it to the user yourself. Anyone with this link can set the password, and it stops working after one use.</p>
+        </div>
+      )}
 
       <div className="relative mb-6">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
@@ -114,6 +138,13 @@ export function AdminUsers() {
                         {u.approved ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                       </button>
                     )}
+                    <button
+                      onClick={() => handleResetLink(u.id)}
+                      className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-blue-400 transition-colors"
+                      title="Create password reset link"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleImpersonate(u.id, u.name)}
                       className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-green-400 transition-colors"

@@ -10,7 +10,7 @@ import { AppError } from '../types';
  * notification channel must not break a deploy or a cleanup.
  */
 
-export type NotifyEvent = 'deployFailed' | 'diskAlert' | 'containerUnhealthy' | 'dockerDaemon' | 'signupPending';
+export type NotifyEvent = 'deployFailed' | 'diskAlert' | 'containerUnhealthy' | 'dockerDaemon' | 'signupPending' | 'backupFailed';
 
 export const EVENT_LABELS: Record<NotifyEvent, string> = {
   deployFailed: 'Deployment failed',
@@ -18,10 +18,11 @@ export const EVENT_LABELS: Record<NotifyEvent, string> = {
   containerUnhealthy: 'Container unhealthy / crash-looping',
   dockerDaemon: 'Docker daemon problem',
   signupPending: 'New signup awaiting approval',
+  backupFailed: 'Scheduled database backup failed',
 };
 
 const DEFAULT_EVENTS: Record<NotifyEvent, boolean> = {
-  deployFailed: true, diskAlert: true, containerUnhealthy: true, dockerDaemon: true, signupPending: true,
+  deployFailed: true, diskAlert: true, containerUnhealthy: true, dockerDaemon: true, signupPending: true, backupFailed: true,
 };
 
 const HTTP_TIMEOUT_MS = 8000;
@@ -65,6 +66,25 @@ export class NotificationService {
       email: row?.notifyEmail || row?.adminEmail || process.env.ADMIN_EMAIL || null,
       events: { ...DEFAULT_EVENTS, ...((row?.notifyEvents as any) || {}) },
     };
+  }
+
+  private static transport() {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+      connectionTimeout: HTTP_TIMEOUT_MS,
+      socketTimeout: HTTP_TIMEOUT_MS,
+    });
+  }
+
+  /** Transactional email to a user (e.g. password reset). Throws when SMTP is not configured. */
+  static async sendEmail(to: string, subject: string, text: string) {
+    if (!smtpConfigured()) throw new AppError('SMTP is not configured on this server', 503);
+    await this.transport().sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'clouddabba@localhost', to, subject, text,
+    });
   }
 
   /** Settings for the admin UI — secrets are never returned. */

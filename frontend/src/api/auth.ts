@@ -15,3 +15,9 @@ export const storeGitHubPAT = (pat: string) =>
 
 export const removeGitHubPAT = () =>
   client.delete('/auth/github-pat');
+
+export const forgotPassword = (email: string) =>
+  client.post<{ message: string }>('/auth/forgot-password', { email }).then((r) => r.data);
+
+export const resetPassword = (token: string, password: string) =>
+  client.post<{ message: string }>('/auth/reset-password', { token, password }).then((r) => r.data);

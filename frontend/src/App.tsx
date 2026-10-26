@@ -15,6 +15,9 @@ import { Deploy } from './pages/Deploy';
 import { LogsViewer } from './pages/LogsViewer';
 
 // Admin
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+import { AdminAudit } from './pages/admin/AdminAudit';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminUsers } from './pages/admin/AdminUsers';
@@ -44,6 +47,8 @@ function App() {
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
           </Route>
 
           {/* Protected user dashboard */}
@@ -66,6 +71,7 @@ function App() {
             <Route path="/admin/images" element={<AdminImages />} />
             <Route path="/admin/databases" element={<AdminDatabases />} />
             <Route path="/admin/logs" element={<AdminLogs />} />
+            <Route path="/admin/audit" element={<AdminAudit />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/changelog" element={<AdminChangelog />} />
           </Route>

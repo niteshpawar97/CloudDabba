@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { BackupService } from '../../core/services/backup.service';
 import { ProjectService } from '../../core/services/project.service';
 import { DeploymentService } from '../../core/services/deployment.service';
 import { DockerService } from '../../core/services/docker.service';
@@ -53,6 +54,8 @@ export class ProjectController {
           await DockerService.stopContainer(dep.containerId).catch(() => {});
         }
       }
+
+      await BackupService.deleteForProject(req.params.id as string).catch(() => {});
 
       // Cleanup provisioned databases
       const projData = await ProjectService.getById(req.params.id as string, req.user!.id).catch(() => null);
