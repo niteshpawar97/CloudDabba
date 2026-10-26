@@ -219,3 +219,67 @@ export interface ResourceOverview {
 }
 export const getResourceOverview = () =>
   client.get<{ data: ResourceOverview }>('/admin/resources').then((r) => r.data.data);
+
+// ---- Docker / container health ----
+export interface HealthStatus {
+  daemon: { ok: boolean; error?: string; hint?: string; detectedAt?: number };
+  issues: Array<{
+    id: string; name: string; kind: 'unhealthy' | 'restarting' | 'down'; status: string;
+    managed: boolean; projectId?: string; projectName?: string; since: number; confirmed: boolean;
+  }>;
+  containers: { total: number; running: number };
+  checkedAt: number | null;
+}
+export const getHealth = () =>
+  client.get<{ data: HealthStatus }>('/admin/health').then((r) => r.data.data);
+
+// ---- Notifications ----
+export type NotifyEvent = 'deployFailed' | 'diskAlert' | 'containerUnhealthy' | 'dockerDaemon' | 'signupPending' | 'backupFailed';
+export interface NotificationSettings {
+  webhookConfigured: boolean;
+  telegramConfigured: boolean;
+  telegramChatId: string | null;
+  email: string | null;
+  smtpConfigured: boolean;
+  events: Record<NotifyEvent, boolean>;
+  eventLabels: Record<NotifyEvent, string>;
+}
+export interface NotificationUpdate {
+  webhookUrl?: string;
+  telegramToken?: string;
+  telegramChatId?: string;
+  email?: string;
+  events?: Partial<Record<NotifyEvent, boolean>>;
+}
+export const getNotificationSettings = () =>
+  client.get<{ data: NotificationSettings }>('/admin/notifications').then((r) => r.data.data);
+export const updateNotificationSettings = (data: NotificationUpdate) =>
+  client.put<{ data: NotificationSettings }>('/admin/notifications', data).then((r) => r.data.data);
+export const testNotification = () =>
+  client.post<{ message: string }>('/admin/notifications/test').then((r) => r.data);
+
+// ---- Password reset link / audit log / platform backups ----
+export const createResetLink = (userId: string) =>
+  client.post<{ data: { link: string; email: string; expiresInMinutes: number } }>(`/admin/users/${userId}/reset-link`).then((r) => r.data.data);
+
+export interface AuditEntry {
+  id: string;
+  actorEmail: string | null;
+  impersonatedBy: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  ip: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+}
+export const getAuditLog = (page = 1, action = '', actor = '') =>
+  client.get<{ data: { logs: AuditEntry[]; pagination: { page: number; pages: number; total: number } } }>(
+    `/admin/audit?page=${page}&action=${encodeURIComponent(action)}&actor=${encodeURIComponent(actor)}`,
+  ).then((r) => r.data.data);
+
+export const getPlatformBackups = () =>
+  client.get<{ data: import('./projects').BackupEntry[] }>('/admin/backups').then((r) => r.data.data);
+export const createPlatformBackup = () => client.post('/admin/backups/platform');
+export const deletePlatformBackup = (id: string) => client.delete(`/admin/backups/${id}`);

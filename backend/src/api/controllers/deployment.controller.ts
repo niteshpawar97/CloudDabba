@@ -60,6 +60,15 @@ export class DeploymentController {
     }
   }
 
+  static async rollback(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const deployment = await DeploymentService.rollback(req.params.id as string, req.user!.id);
+      sendSuccess(res, deployment, 'Rolled back successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getLogs(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       await DeploymentService.getDeployment(req.params.id as string, req.user!.id);

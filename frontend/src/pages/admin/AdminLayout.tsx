@@ -1,7 +1,7 @@
 import { NavLink, Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { Spinner } from '../../components/ui/Spinner';
-import { LayoutDashboard, Users, FolderOpen, Container, Image, Terminal, Database, Settings, History, Cloud, LogOut, ArrowLeft } from 'lucide-react';
+import { LayoutDashboard, Users, FolderOpen, Container, Image, Terminal, Database, Settings, History, Cloud, LogOut, ArrowLeft, ScrollText } from 'lucide-react';
 import clsx from 'clsx';
 
 const navItems = [
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/admin/images', icon: Image, label: 'Images' },
   { to: '/admin/databases', icon: Database, label: 'Databases' },
   { to: '/admin/logs', icon: Terminal, label: 'Logs' },
+  { to: '/admin/audit', icon: ScrollText, label: 'Audit Log' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
   { to: '/admin/changelog', icon: History, label: 'Changelog' },
 ];

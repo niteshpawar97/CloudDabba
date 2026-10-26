@@ -4,11 +4,15 @@ import docker from '../../infrastructure/docker/docker-client';
 import { AuthRequest, AppError } from '../../core/types';
 import { sendSuccess } from '../../shared/utils/api-response';
 import { AuthService } from '../../core/services/auth.service';
+import { AuditService } from '../../core/services/audit.service';
+import { PasswordResetService } from '../../core/services/password-reset.service';
 import { DockerService } from '../../core/services/docker.service';
 import { changelog } from '../../data/changelog';
 import { DatabaseProvisionService } from '../../core/services/database-provision.service';
 import { ImageCleanupService } from '../../core/services/image-cleanup.service';
 import { ResourceMonitorService } from '../../core/services/resource-monitor.service';
+import { HealthMonitorService } from '../../core/services/health-monitor.service';
+import { NotificationService } from '../../core/services/notification.service';
 import { StorageManagerService } from '../../core/services/storage-manager.service';
 import { DeployLockService } from '../../core/services/deploy-lock.service';
 import logger from '../../shared/utils/logger';
@@ -140,6 +144,28 @@ export class AdminController {
       }));
 
       sendSuccess(res, { users: formatted, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // One-time password reset link an admin can hand to a user (works without SMTP)
+  static async createResetLink(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await PasswordResetService.adminLink(req.params.id as string), 'Reset link created');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async listAudit(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await AuditService.list({
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 50,
+        action: (req.query.action as string) || undefined,
+        actor: (req.query.actor as string) || undefined,
+      }));
     } catch (error) {
       next(error);
     }
@@ -621,6 +647,49 @@ export class AdminController {
         { containersRemoved, imagesRemoved, networksRemoved, reclaimed },
         `Pruned ${containersRemoved} containers, ${imagesRemoved} images, ${networksRemoved} networks (${formatBytes(reclaimed)} reclaimed)`,
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getHealth(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await HealthMonitorService.getStatus());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getNotificationSettings(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      sendSuccess(res, await NotificationService.getSettings());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateNotificationSettings(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { webhookUrl, telegramToken, telegramChatId, email, events } = req.body || {};
+      const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+      sendSuccess(
+        res,
+        await NotificationService.updateSettings({
+          webhookUrl: str(webhookUrl), telegramToken: str(telegramToken), telegramChatId: str(telegramChatId),
+          email: str(email), events: events && typeof events === 'object' ? events : undefined,
+        }),
+        'Notification settings saved',
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async testNotification(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { channels, errors } = await NotificationService.sendTest();
+      if (errors.length === channels.length) throw new AppError(`Test failed: ${errors.join('; ')}`, 502);
+      sendSuccess(res, { channels, errors }, errors.length ? `Sent with errors: ${errors.join('; ')}` : `Test sent via ${channels.join(', ')}`);
     } catch (error) {
       next(error);
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, deleteProject, getWebhookStatus, enableWebhook, disableWebhook, updateEnvVars, getDomainStatus, setCustomDomain, verifyCustomDomain, removeCustomDomain } from '../api/projects';
-import { triggerDeploy, stopDeployment, startDeployment, restartDeployment } from '../api/deployments';
+import { triggerDeploy, stopDeployment, startDeployment, restartDeployment, rollbackDeployment } from '../api/deployments';
 import { getConfig, updateSubdomain, checkSubdomain } from '../api/config';
 import { getDatabaseStatus, enablePostgres, disablePostgres, enableRedis, disableRedis, enableMariadb, disableMariadb, testDbConnection } from '../api/database';
 import { DatabaseBrowserModal } from '../components/project/DatabaseBrowserModal';
@@ -11,10 +11,11 @@ import { DeploymentStatusBadge } from '../components/DeploymentStatusBadge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { BackupsCard } from '../components/project/BackupsCard';
 import { ResourcesCard } from '../components/project/ResourcesCard';
 import { ProjectDetailSkeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database, Send } from 'lucide-react';
+import { Globe, GitBranch, Rocket, Trash2, ExternalLink, Clock, Edit3, Check, X, Square, Play, RotateCw, Terminal, Webhook, Copy, CheckCircle, Server, Eye, EyeOff, Plus, ChevronDown, ChevronUp, Timer, Link2, RefreshCw, AlertCircle, Database, Send, Undo2 } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 function relativeTime(date: string) {
@@ -532,6 +533,8 @@ export function ProjectDetail() {
         )}
       </Card>
 
+      <BackupsCard projectId={projectId!} postgres={!!dbStatus?.postgres?.enabled} mariadb={!!dbStatus?.mariadb?.enabled} />
+
       <ResourcesCard projectId={projectId!} isRunning={project?.status === 'ACTIVE'} />
 
       {/* Database Provisioning */}
@@ -855,6 +858,9 @@ export function ProjectDetail() {
               <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(`/logs/${dep.id}`)}>
                 <DeploymentStatusBadge status={dep.status} />
                 <span className="text-sm text-slate-400 font-mono">{dep.commitHash?.slice(0, 7) || '—'}</span>
+                {dep.rollbackOf && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">rollback</span>
+                )}
                 {duration && (
                   <span className="text-[10px] text-slate-600 flex items-center gap-1">
                     <Timer className="h-3 w-3" /> {duration}
@@ -869,6 +875,20 @@ export function ProjectDetail() {
                   <button onClick={(e) => { e.stopPropagation(); navigate(`/logs/${dep.id}`); }}
                     className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 text-xs font-medium">
                     <Terminal className="h-3 w-3" /> Logs
+                  </button>
+                )}
+                {dep.canRollback && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!confirm('Roll back to this version? The current version will be stopped.')) return;
+                      rollbackDeployment(dep.id)
+                        .then(() => { toast.success('Rolled back'); return getProject(projectId!).then(setProject); })
+                        .catch((err) => toast.error(err?.response?.data?.message || 'Rollback failed'));
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-medium"
+                  >
+                    <Undo2 className="h-3 w-3" /> Rollback
                   </button>
                 )}
                 {dep.containerId && (

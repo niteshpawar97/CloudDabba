@@ -6,6 +6,10 @@ import prisma from './database/connection';
 import logger from './shared/utils/logger';
 import { ImageCleanupService } from './core/services/image-cleanup.service';
 import { ResourceMonitorService } from './core/services/resource-monitor.service';
+import { HealthMonitorService } from './core/services/health-monitor.service';
+import { AuditService } from './core/services/audit.service';
+import { BackupService } from './core/services/backup.service';
+import { PasswordResetService } from './core/services/password-reset.service';
 import { StorageManagerService } from './core/services/storage-manager.service';
 
 const server = http.createServer(app);
@@ -29,6 +33,10 @@ async function start() {
     ImageCleanupService.startScheduler();
     StorageManagerService.startMonitor();
     ResourceMonitorService.startMonitor();
+    HealthMonitorService.startMonitor();
+    BackupService.startScheduler();
+    AuditService.startPruner();
+    PasswordResetService.startPruner();
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
